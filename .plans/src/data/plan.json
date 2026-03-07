@@ -1,0 +1,181 @@
+{
+  "meta": {
+    "projectName": "enowX-Coder",
+    "description": "AI-powered Tauri desktop coding assistant",
+    "techStack": ["Rust", "Tauri", "React", "TypeScript"],
+    "status": "in_progress",
+    "createdAt": "2026-03-07T00:00:00Z",
+    "updatedAt": "2026-03-07T18:00:00Z",
+    "version": "0.1.0",
+    "repository": "https://github.com/enowdev/enowX-Coder"
+  },
+  "roadmap": {
+    "phases": [
+      {
+        "id": "phase-1",
+        "name": "Foundation",
+        "description": "Core architecture and project setup",
+        "status": "completed",
+        "startDate": "2026-03-01",
+        "endDate": "2026-03-07",
+        "progress": 100,
+        "milestones": [
+          { "id": "m1", "title": "Project scaffold", "done": true },
+          { "id": "m2", "title": "Rust backend structure", "done": true },
+          { "id": "m3", "title": "Tauri IPC setup", "done": true }
+        ]
+      },
+      {
+        "id": "phase-2",
+        "name": "Core Features",
+        "description": "Main AI coding assistant features",
+        "status": "in_progress",
+        "startDate": "2026-03-08",
+        "endDate": "2026-03-21",
+        "progress": 15,
+        "milestones": [
+          { "id": "m4", "title": "Code editor integration", "done": false },
+          { "id": "m5", "title": "AI chat interface", "done": false },
+          { "id": "m6", "title": "File tree explorer", "done": false }
+        ]
+      },
+      {
+        "id": "phase-3",
+        "name": "Polish & Release",
+        "description": "UI polish, testing, and v1.0 release",
+        "status": "planned",
+        "startDate": "2026-03-22",
+        "endDate": "2026-04-05",
+        "progress": 0,
+        "milestones": [
+          { "id": "m7", "title": "E2E tests", "done": false },
+          { "id": "m8", "title": "Performance optimization", "done": false },
+          { "id": "m9", "title": "v1.0 release", "done": false }
+        ]
+      }
+    ]
+  },
+  "kanban": {
+    "columns": [
+      {
+        "id": "backlog",
+        "title": "Backlog",
+        "tasks": [
+          { "id": "t1", "title": "Implement syntax highlighting", "description": "Add tree-sitter based syntax highlighting for 20+ languages", "priority": "high", "tags": ["frontend", "editor"], "assignee": null, "createdAt": "2026-03-07T10:00:00Z" },
+          { "id": "t2", "title": "Settings panel UI", "description": "User preferences: theme, font size, keybindings", "priority": "medium", "tags": ["frontend", "ui"], "assignee": null, "createdAt": "2026-03-07T10:00:00Z" },
+          { "id": "t3", "title": "Plugin system architecture", "description": "Design extensible plugin API for third-party integrations", "priority": "low", "tags": ["backend", "architecture"], "assignee": null, "createdAt": "2026-03-07T10:00:00Z" }
+        ]
+      },
+      {
+        "id": "in_progress",
+        "title": "In Progress",
+        "tasks": [
+          { "id": "t4", "title": "AI chat interface", "description": "Streaming chat UI with markdown rendering and code blocks", "priority": "high", "tags": ["frontend", "ai"], "assignee": "enow", "createdAt": "2026-03-06T09:00:00Z" },
+          { "id": "t5", "title": "Tauri command layer", "description": "IPC commands for file system operations", "priority": "high", "tags": ["backend", "rust"], "assignee": "enow", "createdAt": "2026-03-05T14:00:00Z" }
+        ]
+      },
+      {
+        "id": "review",
+        "title": "Review",
+        "tasks": [
+          { "id": "t6", "title": "Error handling system", "description": "Unified AppError enum with thiserror", "priority": "high", "tags": ["backend", "rust"], "assignee": "enow", "createdAt": "2026-03-04T11:00:00Z" }
+        ]
+      },
+      {
+        "id": "done",
+        "title": "Done",
+        "tasks": [
+          { "id": "t7", "title": "Project scaffold", "description": "Vite + React + Tauri boilerplate", "priority": "high", "tags": ["setup"], "assignee": "enow", "createdAt": "2026-03-01T09:00:00Z" },
+          { "id": "t8", "title": "Git workflow setup", "description": "Conventional commits + trunk-based dev", "priority": "medium", "tags": ["devops"], "assignee": "enow", "createdAt": "2026-03-01T10:00:00Z" },
+          { "id": "t9", "title": "AGENTS.md rules", "description": "Auto-trigger rules for AI skills", "priority": "medium", "tags": ["devops", "ai"], "assignee": "enow", "createdAt": "2026-03-07T18:00:00Z" }
+        ]
+      }
+    ]
+  },
+  "erd": {
+    "entities": [
+      {
+        "id": "user",
+        "name": "User",
+        "fields": [
+          { "name": "id", "type": "INTEGER", "primaryKey": true },
+          { "name": "username", "type": "TEXT", "nullable": false },
+          { "name": "email", "type": "TEXT", "nullable": false },
+          { "name": "created_at", "type": "DATETIME", "nullable": false }
+        ]
+      },
+      {
+        "id": "project",
+        "name": "Project",
+        "fields": [
+          { "name": "id", "type": "INTEGER", "primaryKey": true },
+          { "name": "name", "type": "TEXT", "nullable": false },
+          { "name": "path", "type": "TEXT", "nullable": false },
+          { "name": "user_id", "type": "INTEGER", "nullable": false },
+          { "name": "created_at", "type": "DATETIME", "nullable": false }
+        ]
+      },
+      {
+        "id": "session",
+        "name": "Session",
+        "fields": [
+          { "name": "id", "type": "TEXT", "primaryKey": true },
+          { "name": "project_id", "type": "INTEGER", "nullable": false },
+          { "name": "title", "type": "TEXT", "nullable": true },
+          { "name": "created_at", "type": "DATETIME", "nullable": false }
+        ]
+      },
+      {
+        "id": "message",
+        "name": "Message",
+        "fields": [
+          { "name": "id", "type": "INTEGER", "primaryKey": true },
+          { "name": "session_id", "type": "TEXT", "nullable": false },
+          { "name": "role", "type": "TEXT", "nullable": false },
+          { "name": "content", "type": "TEXT", "nullable": false },
+          { "name": "created_at", "type": "DATETIME", "nullable": false }
+        ]
+      }
+    ],
+    "relations": [
+      { "from": "project", "to": "user", "type": "many-to-one", "label": "belongs to" },
+      { "from": "session", "to": "project", "type": "many-to-one", "label": "belongs to" },
+      { "from": "message", "to": "session", "type": "many-to-one", "label": "belongs to" }
+    ]
+  },
+  "features": [
+    { "id": "f1", "name": "AI Chat Interface", "description": "Streaming chat with markdown + code blocks", "status": "in_progress", "priority": "high", "category": "core" },
+    { "id": "f2", "name": "Code Editor", "description": "Monaco-based editor with syntax highlighting", "status": "planned", "priority": "high", "category": "core" },
+    { "id": "f3", "name": "File Explorer", "description": "Tree view of project files", "status": "planned", "priority": "high", "category": "core" },
+    { "id": "f4", "name": "Git Integration", "description": "Inline git status, diff viewer, commit UI", "status": "planned", "priority": "medium", "category": "integration" },
+    { "id": "f5", "name": "Terminal", "description": "Embedded terminal panel", "status": "planned", "priority": "medium", "category": "core" },
+    { "id": "f6", "name": "Plugin System", "description": "Extensible plugin API", "status": "planned", "priority": "low", "category": "platform" },
+    { "id": "f7", "name": "Settings Panel", "description": "User preferences and configuration", "status": "planned", "priority": "medium", "category": "ux" },
+    { "id": "f8", "name": "Project Scaffold", "description": "Vite + Tauri boilerplate", "status": "shipped", "priority": "high", "category": "setup" }
+  ],
+  "suggestions": [
+    { "id": "s1", "title": "Add LSP support", "description": "Integrate Language Server Protocol for intelligent code completion, go-to-definition, and inline diagnostics across all supported languages.", "impact": "high", "effort": "high", "category": "dx" },
+    { "id": "s2", "title": "Offline AI mode", "description": "Bundle a small local LLM (e.g., Phi-3 mini via llama.cpp) for offline usage when no internet connection is available.", "impact": "high", "effort": "high", "category": "ai" },
+    { "id": "s3", "title": "Multi-tab editor", "description": "Support multiple open files simultaneously with tab management, split view, and tab persistence across sessions.", "impact": "medium", "effort": "medium", "category": "ux" },
+    { "id": "s4", "title": "AI code review", "description": "Automatic code review on git diff — highlight potential bugs, style issues, and suggest improvements before commit.", "impact": "high", "effort": "medium", "category": "ai" },
+    { "id": "s5", "title": "Snippet library", "description": "Personal snippet manager with fuzzy search, tags, and AI-assisted snippet generation from selected code.", "impact": "medium", "effort": "low", "category": "dx" }
+  ],
+  "architecture": {
+    "decisions": [
+      { "id": "a1", "title": "Tauri over Electron", "rationale": "Smaller bundle size (~10MB vs ~150MB), better performance, Rust backend for safety", "date": "2026-03-01", "status": "accepted" },
+      { "id": "a2", "title": "Trunk-based development", "rationale": "Short-lived branches, always-deployable main, reduces merge conflicts", "date": "2026-03-01", "status": "accepted" },
+      { "id": "a3", "title": "SQLite via sqlx", "rationale": "Embedded DB, no server required, async support, compile-time query checking", "date": "2026-03-07", "status": "proposed" },
+      { "id": "a4", "title": "AppError unified enum", "rationale": "Single error type with thiserror, serializable for frontend, no unwrap() in production", "date": "2026-03-07", "status": "accepted" }
+    ],
+    "patterns": [
+      { "name": "Commands as thin wrappers", "description": "Tauri commands only validate input and delegate to services. No business logic in commands." },
+      { "name": "Services layer", "description": "All business logic in src-tauri/src/services/. No Tauri imports. Fully testable." },
+      { "name": "Conventional Commits", "description": "feat/fix/chore/refactor/docs/build/test/perf with optional scope." }
+    ]
+  },
+  "sessionLog": [
+    { "id": "l1", "timestamp": "2026-03-07T18:30:00Z", "action": "Plan created", "details": "Initial plan created by AI agent during brainstorming session", "agent": "brainstorming" },
+    { "id": "l2", "timestamp": "2026-03-07T18:31:00Z", "action": "Skills created", "details": "git-master and enowx-rust skills added to .claude/skills/", "agent": "skill-creator" },
+    { "id": "l3", "timestamp": "2026-03-07T18:32:00Z", "action": "AGENTS.md created", "details": "Auto-trigger rules for 4 passive skills added to project root", "agent": "mnemosyne" }
+  ]
+}

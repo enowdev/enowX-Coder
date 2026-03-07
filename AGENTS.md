@@ -56,6 +56,17 @@ These rules apply automatically — no need to be asked.
 - Keep memory files concise: file paths, key decisions, dependencies, next steps
 - Update existing memory file if same files were modified (don't create duplicates)
 
+### 5. Project Planning → plan-visualizer skill
+
+**Trigger**: Alongside `brainstorming` when starting a new project or feature set, and alongside `mnemosyne` when task status changes.
+
+- Always read `.plans/src/data/plan.json` before writing — never overwrite blindly
+- Update `meta.updatedAt` on every write
+- Move tasks between kanban columns as work progresses (`backlog → in_progress → review → done`)
+- Update phase `progress` (0–100) based on milestone completion ratio
+- Add a `sessionLog` entry for every significant action
+- Dev server: `cd .plans && npm run dev` → `http://localhost:1998`
+
 ---
 
 ## Code Standards
