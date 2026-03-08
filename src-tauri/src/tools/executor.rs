@@ -330,17 +330,6 @@ impl ToolExecutor {
     }
 
     pub fn is_outside_sandbox(&self, path: &str) -> bool {
-        let requested = if Path::new(path).is_absolute() {
-            PathBuf::from(path)
-        } else {
-            self.sandbox.join(path)
-        };
-
-        match (self.sandbox.canonicalize(), requested.canonicalize()) {
-            (Ok(sandbox_canonical), Ok(requested_canonical)) => {
-                !requested_canonical.starts_with(sandbox_canonical)
-            }
-            _ => true,
-        }
+        self.validate_path(path).is_err()
     }
 }

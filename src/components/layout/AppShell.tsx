@@ -160,7 +160,7 @@ export const AppShell: React.FC = () => {
         toolCallId: string;
         agentRunId: string;
         toolName: string;
-        input: string;
+        input: unknown;
       }>('agent-tool-call', (event) => {
         const { toolCallId, agentRunId, toolName, input } = event.payload;
         const now = new Date().toISOString();
@@ -168,7 +168,7 @@ export const AppShell: React.FC = () => {
           id: toolCallId,
           agentRunId,
           toolName: toolName as ToolCall['toolName'],
-          input,
+          input: typeof input === 'string' ? input : JSON.stringify(input),
           output: null,
           status: 'running',
           error: null,

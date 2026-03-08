@@ -528,7 +528,7 @@ impl AgentRunner {
         &self,
         agent_run_id: &str,
         agent_type: &str,
-        project_path: &str,
+        _project_path: &str,
         executor: &ToolExecutor,
         tool_call: &ParsedToolCall,
     ) -> AppResult<ToolExecutionOutcome> {
@@ -563,7 +563,6 @@ impl AgentRunner {
         self.emit_permission_request_if_needed(
             agent_run_id,
             agent_type,
-            project_path,
             executor,
             tool_call,
         );
@@ -627,7 +626,6 @@ impl AgentRunner {
         &self,
         agent_run_id: &str,
         agent_type: &str,
-        project_path: &str,
         executor: &ToolExecutor,
         tool_call: &ParsedToolCall,
     ) {
@@ -640,35 +638,36 @@ impl AgentRunner {
             return;
         };
 
-        let full_path = if PathBuf::from(&path).is_absolute() {
-            path
-        } else {
-            PathBuf::from(project_path)
-                .join(path)
-                .to_string_lossy()
-                .to_string()
-        };
-
-        if executor.requires_permission(&full_path) {
+        if executor.requires_permission(&path) {
+            let display_path = if PathBuf::from(&path).is_absolute() {
+                path.clone()
+            } else {
+                executor.sandbox.join(&path).to_string_lossy().to_string()
+            };
             let _ = self.app_handle.emit(
                 "agent-permission-request",
                 AgentPermissionRequestEvent {
                     agent_run_id: agent_run_id.to_string(),
                     permission_type: "sensitive_file".to_string(),
-                    path: full_path,
+                    path: display_path,
                     agent_type: agent_type.to_string(),
                 },
             );
             return;
         }
 
-        if executor.is_outside_sandbox(&full_path) {
+        if executor.is_outside_sandbox(&path) {
+            let display_path = if PathBuf::from(&path).is_absolute() {
+                path
+            } else {
+                executor.sandbox.join(path).to_string_lossy().to_string()
+            };
             let _ = self.app_handle.emit(
                 "agent-permission-request",
                 AgentPermissionRequestEvent {
                     agent_run_id: agent_run_id.to_string(),
                     permission_type: "outside_sandbox".to_string(),
-                    path: full_path,
+                    path: display_path,
                     agent_type: agent_type.to_string(),
                 },
             );
