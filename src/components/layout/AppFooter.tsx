@@ -1,16 +1,20 @@
 import React from 'react';
-import { GithubLogo, Heart } from '@phosphor-icons/react';
+import { GithubLogo, Heart, SidebarSimple } from '@phosphor-icons/react';
+import { useUIStore } from '@/stores/useUIStore';
+import { cn } from '@/lib/utils';
 
 export const AppFooter: React.FC = () => {
+  const { rightSidebarOpen, toggleRightSidebar } = useUIStore();
+
   return (
-    <footer className="h-7 flex items-center justify-between px-4 border-t border-[var(--border)] bg-[var(--surface)] col-span-3 shrink-0">
+    <footer className="h-9 flex items-center justify-between px-4 border-t border-[var(--border)] bg-[var(--surface)] col-span-3 shrink-0">
       <span className="text-[10px] text-[var(--text-subtle)] tracking-wide select-none">
         enowX Coder v0.1.0
       </span>
 
       <div className="flex items-center gap-3">
         <span className="flex items-center gap-1 text-[10px] text-[var(--text-subtle)] select-none">
-          Made with <Heart size={10} weight="fill" className="text-[var(--text-subtle)]" /> by enowdev
+          Made with <Heart size={10} weight="fill" /> by enowdev
         </span>
         <a
           href="https://github.com/enowdev/enowX-Coder"
@@ -21,6 +25,21 @@ export const AppFooter: React.FC = () => {
         >
           <GithubLogo size={13} />
         </a>
+
+        <div className="w-px h-3.5 bg-[var(--border)]" />
+
+        <button
+          onClick={toggleRightSidebar}
+          title={rightSidebarOpen ? 'Hide right panel' : 'Show right panel'}
+          className={cn(
+            'flex items-center justify-center w-6 h-6 rounded-md transition-colors',
+            rightSidebarOpen
+              ? 'text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/5'
+              : 'text-[var(--text-subtle)] hover:text-[var(--text-muted)] hover:bg-white/5'
+          )}
+        >
+          <SidebarSimple size={14} weight={rightSidebarOpen ? 'fill' : 'regular'} className="scale-x-[-1]" />
+        </button>
       </div>
     </footer>
   );

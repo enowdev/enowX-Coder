@@ -33,3 +33,6 @@ src-tauri/target
 
 # Lock files (bun used)
 package-lock.json
+
+# AI memory files
+.memory

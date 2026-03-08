@@ -10,12 +10,14 @@ import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { useChatStore } from '@/stores/useChatStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useUIStore } from '@/stores/useUIStore';
 import { Message } from '@/types';
 
 export const AppShell: React.FC = () => {
   const { addMessage, appendStreamToken, setStreaming, clearStreaming, setMessages } = useChatStore();
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const defaultProviderId = useSettingsStore((s) => s.defaultProviderId);
+  const rightSidebarOpen = useUIStore((s) => s.rightSidebarOpen);
   const unlistenRef = useRef<UnlistenFn[]>([]);
 
   useEffect(() => {
@@ -62,7 +64,6 @@ export const AppShell: React.FC = () => {
 
   const handleSend = async (content: string) => {
     const sessionId = activeSessionId ?? 'default';
-
     const userMsg: Message = {
       id: crypto.randomUUID(),
       sessionId,
@@ -86,7 +87,17 @@ export const AppShell: React.FC = () => {
   };
 
   return (
-    <div className="app-grid bg-[var(--bg)] text-[var(--text)]">
+    <div
+      className="bg-[var(--bg)] text-[var(--text)] h-screen w-screen overflow-hidden"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: rightSidebarOpen
+          ? 'var(--sidebar-width-left) 1fr var(--sidebar-width-right)'
+          : 'var(--sidebar-width-left) 1fr',
+        gridTemplateRows: '1fr auto',
+        transition: 'grid-template-columns 0.2s ease',
+      }}
+    >
       <LeftSidebar />
 
       <main className="flex flex-col overflow-hidden min-h-0">
@@ -95,7 +106,7 @@ export const AppShell: React.FC = () => {
         <ChatInputBar onSend={handleSend} />
       </main>
 
-      <RightSidebar />
+      {rightSidebarOpen && <RightSidebar />}
 
       <AppFooter />
     </div>
