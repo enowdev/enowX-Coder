@@ -42,14 +42,14 @@ const segmentMeta: Record<
     icon: Brain,
     wrapperClass: 'bg-[var(--surface-2)] border border-[var(--border)]',
     headerClass: 'border-b border-[var(--border)] bg-[var(--surface-3)]',
-    iconClass: 'text-[#9aa7ff]',
+    iconClass: 'text-[var(--text-muted)]',
   },
   tool: {
     label: 'Tool Execution',
     icon: Wrench,
     wrapperClass: 'bg-[var(--surface-2)] border border-[var(--border-strong)]',
     headerClass: 'border-b border-[var(--border-strong)] bg-[var(--surface-3)]',
-    iconClass: 'text-[#7fd0ff]',
+    iconClass: 'text-[var(--text-muted)]',
   },
   response: {
     label: 'Response',
@@ -191,7 +191,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(({ message }) => {
       <div className="flex justify-end">
         <div
           className={cn(
-            'px-4 py-3 rounded-xl text-sm leading-relaxed',
+            'px-4 py-3 rounded-xl text-[15px] leading-relaxed',
             'bg-[var(--surface-3)] text-[var(--text)]',
             'border border-[var(--border)]',
             'max-w-[75%]'
@@ -212,7 +212,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(({ message }) => {
         <div className="w-6 h-6 rounded-md bg-[var(--surface-3)] border border-[var(--border)] flex items-center justify-center text-[10px] font-bold text-white shrink-0">
           AI
         </div>
-        <span className="text-[11px] text-[var(--text-subtle)] font-medium">Assistant</span>
+        <span className="text-[12px] text-[var(--text-muted)] font-medium">Assistant</span>
       </div>
 
       <div className="flex flex-col gap-3 w-full">
@@ -227,7 +227,7 @@ export const ChatMessage = React.memo<ChatMessageProps>(({ message }) => {
                   {segment.title ? segment.title : meta.label}
                 </span>
               </div>
-              <div className="px-4 py-3 ai-prose">
+              <div className="px-4 py-3 ai-prose ai-prose-readable">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}

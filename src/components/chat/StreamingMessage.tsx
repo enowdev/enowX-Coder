@@ -12,9 +12,9 @@ export const StreamingMessage: React.FC = () => {
         <div className="w-6 h-6 rounded-md bg-[var(--surface-3)] border border-[var(--border)] flex items-center justify-center text-[10px] font-bold text-white shrink-0">
           AI
         </div>
-        <span className="text-[11px] text-[var(--text-subtle)] font-medium">Assistant</span>
+        <span className="text-[12px] text-[var(--text-muted)] font-medium">Assistant</span>
       </div>
-      <div className="w-full px-4 py-3 rounded-xl text-sm leading-relaxed bg-[var(--surface)] text-[var(--text)]">
+      <div className="w-full px-4 py-3 rounded-xl text-[15px] leading-relaxed bg-[var(--surface)] text-[var(--text)] border border-[var(--border)]">
         {streamingText ? (
           <>
             <span className="whitespace-pre-wrap">{streamingText}</span>

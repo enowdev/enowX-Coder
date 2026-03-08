@@ -69,6 +69,8 @@ body {
 
 .ai-prose { font-size: 0.875rem; line-height: 1.7; color: var(--text); }
 
+.ai-prose-readable { font-size: 0.95rem; line-height: 1.8; color: var(--text); }
+
 .ai-prose p { margin: 0 0 0.75rem; }
 .ai-prose p:last-child { margin-bottom: 0; }
 

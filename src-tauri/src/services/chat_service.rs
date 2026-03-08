@@ -145,13 +145,36 @@ async fn send_openai_compatible(
     let payload = serde_json::json!({
         "model": model,
         "messages": messages,
+        "temperature": 0.2,
+        "presence_penalty": 0.0,
+        "frequency_penalty": 0.0,
+        "extra_body": {
+            "language": "follow_user"
+        },
         "stream": true,
     });
+
+    let language_guard = "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian.";
+    let payload_with_language = if let Some(arr) = payload.get("messages").and_then(Value::as_array) {
+        let mut updated = arr.clone();
+        updated.insert(
+            0,
+            serde_json::json!({
+                "role": "system",
+                "content": language_guard,
+            }),
+        );
+        let mut p = payload.clone();
+        p["messages"] = Value::Array(updated);
+        p
+    } else {
+        payload
+    };
 
     let mut request = client
         .post(&endpoint)
         .header(CONTENT_TYPE, "application/json")
-        .json(&payload);
+        .json(&payload_with_language);
 
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
         request = request.header(AUTHORIZATION, format!("Bearer {key}"));
@@ -188,11 +211,15 @@ async fn send_anthropic(
         "model": model,
         "max_tokens": 8096,
         "messages": messages,
+        "temperature": 0.2,
         "stream": true,
     });
 
+    let language_guard = "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian.";
     if let Some(sys) = system_msgs.first() {
-        payload["system"] = serde_json::json!(sys.content);
+        payload["system"] = serde_json::json!(format!("{}\n\n{}", sys.content, language_guard));
+    } else {
+        payload["system"] = serde_json::json!(language_guard);
     }
 
     let mut request = client
