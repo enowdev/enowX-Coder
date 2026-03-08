@@ -1,30 +1,38 @@
 import React from 'react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useProjectStore } from '@/stores/useProjectStore';
-import { CaretUpDown, FolderSimple } from '@phosphor-icons/react';
+import { useSessionStore } from '@/stores/useSessionStore';
+import { FolderOpen, Plus } from '@phosphor-icons/react';
+import { generateId } from '@/lib/utils';
 
 export const ProjectSwitcher: React.FC = () => {
-  const projects = useProjectStore((state) => state.projects);
-  const activeProjectId = useProjectStore((state) => state.activeProjectId);
-  const activeProject = projects.find(p => p.id === activeProjectId);
+  const { addProject, setActiveProjectId } = useProjectStore();
+  const { addSession, setActiveSessionId } = useSessionStore();
+
+  const handleOpenFolder = async () => {
+    const selected = await open({ directory: true, multiple: false });
+    if (!selected || typeof selected !== 'string') return;
+
+    const folderName = selected.split('/').filter(Boolean).pop() ?? selected;
+    const now = new Date().toISOString();
+    const projectId = generateId();
+
+    addProject({ id: projectId, name: folderName, path: selected, createdAt: now, updatedAt: now });
+    setActiveProjectId(projectId);
+
+    const sessionId = generateId();
+    addSession({ id: sessionId, projectId, title: 'New Chat', createdAt: now, updatedAt: now });
+    setActiveSessionId(sessionId);
+  };
 
   return (
-    <div className="px-1 py-1">
-      <button 
-        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 rounded-xl bg-[var(--surface-2)]/50 hover:bg-[var(--surface-2)] transition-all border border-[var(--border)] group"
-        onClick={() => {
-          // Logic for project selection modal/dropdown
-        }}
-      >
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-6 h-6 rounded-md bg-[var(--surface-3)] flex items-center justify-center border border-[var(--border)]">
-            <FolderSimple size={14} weight="fill" className="text-[var(--text-muted)]" />
-          </div>
-          <span className="text-xs font-bold truncate tracking-tight text-[var(--text)]">
-            {activeProject ? activeProject.name : 'Select Project'}
-          </span>
-        </div>
-        <CaretUpDown size={12} weight="bold" className="text-[var(--text-muted)] group-hover:text-[var(--text)] transition-colors" />
-      </button>
-    </div>
+    <button
+      onClick={handleOpenFolder}
+      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/5 transition-colors text-sm border border-dashed border-[var(--border)] hover:border-[var(--border-strong)]"
+    >
+      <FolderOpen size={15} />
+      <span className="text-xs">Open folder</span>
+      <Plus size={12} className="ml-auto opacity-50" />
+    </button>
   );
 };
