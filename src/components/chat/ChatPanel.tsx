@@ -5,23 +5,43 @@ import { ChatMessage } from './ChatMessage';
 import { StreamingMessage } from './StreamingMessage';
 
 export const ChatPanel: React.FC = () => {
-  const { messages, isStreaming } = useChatStore();
+  const { messages, isStreaming, streamingText } = useChatStore();
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
+  const userScrolledUp = useRef(false);
+
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
+    bottomRef.current?.scrollIntoView({ behavior });
+  }, []);
 
   const checkAtBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const threshold = 8;
-    setAtBottom(el.scrollTop + el.clientHeight >= el.scrollHeight - threshold);
+    const threshold = 40;
+    const isAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
+    setAtBottom(isAtBottom);
+    userScrolledUp.current = !isAtBottom;
   }, []);
 
   useEffect(() => {
-    if (atBottom) {
-      bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (!userScrolledUp.current) {
+      scrollToBottom('smooth');
     }
-  }, [messages, isStreaming, atBottom]);
+  }, [messages, scrollToBottom]);
+
+  useEffect(() => {
+    if (isStreaming && !userScrolledUp.current) {
+      scrollToBottom('instant');
+    }
+  }, [streamingText, isStreaming, scrollToBottom]);
+
+  useEffect(() => {
+    if (!isStreaming) {
+      userScrolledUp.current = false;
+      scrollToBottom('smooth');
+    }
+  }, [isStreaming, scrollToBottom]);
 
   if (messages.length === 0 && !isStreaming) {
     return (
@@ -53,13 +73,10 @@ export const ChatPanel: React.FC = () => {
         </div>
       </div>
 
-      {/* Fade overlay — only when at bottom */}
       {atBottom && (
         <div
           className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
-          style={{
-            background: 'linear-gradient(to bottom, transparent, var(--bg))',
-          }}
+          style={{ background: 'linear-gradient(to bottom, transparent, var(--bg))' }}
         />
       )}
     </div>
