@@ -7,11 +7,11 @@ pub mod state;
 use state::AppState;
 use tauri::Manager;
 
-use crate::error::AppResult;
+use crate::error::AppError;
 
 #[cfg(all(desktop, not(rust_analyzer)))]
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub async fn run() -> AppResult<()> {
+pub fn run() -> Result<(), AppError> {
     let _ = env_logger::try_init();
 
     tauri::Builder::default()
@@ -37,29 +37,40 @@ pub async fn run() -> AppResult<()> {
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
-            tauri::async_runtime::block_on(async move {
-                let data_dir = app_handle
-                    .path()
-                    .app_data_dir()
-                    .expect("failed to resolve app data dir");
 
-                std::fs::create_dir_all(&data_dir)
-                    .expect("failed to create app data dir");
+            let data_dir = app_handle
+                .path()
+                .app_data_dir()
+                .map_err(|e| Box::new(AppError::Internal(e.to_string())))?;
 
-                let db_path = data_dir.join("enowx.db");
-                let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+            std::fs::create_dir_all(&data_dir)
+                .map_err(|e| Box::new(AppError::Io(e.to_string())))?;
 
-                let app_state = AppState::new(&db_url)
-                    .await
-                    .expect("failed to initialize database");
+            let db_path = data_dir.join("enowx.db");
+            let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
 
-                sqlx::migrate!("./migrations")
-                    .run(app_state.pool())
-                    .await
-                    .expect("failed to run migrations");
+            let (tx, rx) = std::sync::mpsc::channel::<Result<AppState, String>>();
 
-                app_handle.manage(app_state);
+            std::thread::spawn(move || {
+                let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
+                let result = rt.block_on(async {
+                    let app_state = AppState::new(&db_url).await.map_err(|e| e.to_string())?;
+                    sqlx::migrate!("./migrations")
+                        .run(app_state.pool())
+                        .await
+                        .map_err(|e| e.to_string())?;
+                    Ok(app_state)
+                });
+                let _ = tx.send(result);
             });
+
+            let app_state = rx
+                .recv()
+                .map_err(|_| Box::new(AppError::Internal("DB init thread dropped".into())))?
+                .map_err(|e| Box::new(AppError::Database(e)))?;
+
+            app_handle.manage(app_state);
+
             Ok(())
         })
         .run(tauri::generate_context!(
@@ -70,6 +81,6 @@ pub async fn run() -> AppResult<()> {
 }
 
 #[cfg(any(not(desktop), rust_analyzer))]
-pub async fn run() -> AppResult<()> {
+pub fn run() -> Result<(), AppError> {
     Ok(())
 }
