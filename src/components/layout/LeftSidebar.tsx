@@ -2,8 +2,11 @@ import React from 'react';
 import { ProjectSwitcher } from '@/components/sidebar/ProjectSwitcher';
 import { SessionList } from '@/components/sidebar/SessionList';
 import { SidebarSimple, GearSix } from '@phosphor-icons/react';
+import { useUIStore } from '@/stores/useUIStore';
 
 export const LeftSidebar: React.FC = () => {
+  const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
+
   return (
     <aside className="h-full bg-[var(--surface)] border-r border-[var(--border)] flex flex-col w-[var(--sidebar-width-left)]">
       <div className="flex items-center gap-2 p-4 border-b border-[var(--border)]">
@@ -26,7 +29,10 @@ export const LeftSidebar: React.FC = () => {
       </div>
 
       <div className="p-3 border-t border-[var(--border)]">
-        <button className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/5 transition-colors text-sm">
+        <button
+          onClick={() => setSettingsOpen(true)}
+          className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/5 transition-colors text-sm"
+        >
           <GearSix size={16} />
           <span>Settings</span>
         </button>

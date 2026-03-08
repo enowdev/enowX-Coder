@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useProjectStore } from '@/stores/useProjectStore';
 import { FolderSimple, ChatCircleText, Trash, CaretRight, Plus } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { generateId } from '@/lib/utils';
+import { Session } from '@/types';
 
 export const SessionList: React.FC = () => {
-  const { sessions, activeSessionId, setActiveSessionId, removeSession, addSession } = useSessionStore();
+  const { sessions, activeSessionId, setActiveSessionId, removeSession, addSession, setSessions } = useSessionStore();
   const { projects, activeProjectId } = useProjectStore();
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     return new Set(activeProjectId ? [activeProjectId] : []);
@@ -24,13 +26,33 @@ export const SessionList: React.FC = () => {
     });
   };
 
-  const handleNewSession = (e: React.MouseEvent, projectId: string) => {
+  const handleNewSession = async (e: React.MouseEvent, projectId: string) => {
     e.stopPropagation();
     const now = new Date().toISOString();
     const session = { id: generateId(), projectId, title: 'New Chat', createdAt: now, updatedAt: now };
     addSession(session);
     setActiveSessionId(session.id);
     setExpandedProjects((prev) => new Set(prev).add(projectId));
+
+    try {
+      const createdSession = await invoke<Session>('create_session', { projectId, title: 'New Chat' });
+      const currentSessions = useSessionStore.getState().sessions;
+      setSessions(currentSessions.map((existing) => (existing.id === session.id ? createdSession : existing)));
+      setActiveSessionId(createdSession.id);
+    } catch (error) {
+      console.error('Failed to persist session creation:', error);
+    }
+  };
+
+  const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
+    e.stopPropagation();
+    removeSession(sessionId);
+
+    try {
+      await invoke('delete_session', { id: sessionId });
+    } catch (error) {
+      console.error('Failed to persist session deletion:', error);
+    }
   };
 
   if (projects.length === 0) {
@@ -102,7 +124,9 @@ export const SessionList: React.FC = () => {
                       />
                       <span className="truncate flex-1">{session.title}</span>
                       <button
-                        onClick={(e) => { e.stopPropagation(); removeSession(session.id); }}
+                        onClick={(e) => {
+                          void handleDeleteSession(e, session.id);
+                        }}
                         className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 transition-all"
                       >
                         <Trash size={11} />
