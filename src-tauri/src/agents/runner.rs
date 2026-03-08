@@ -189,6 +189,21 @@ impl AgentRunner {
         parent_agent_run_id: Option<&str>,
         token_sink: &S,
     ) -> AppResult<String> {
+        if parent_agent_run_id.is_none() {
+            let message_id = Uuid::new_v4().to_string();
+            let created_at = now_rfc3339();
+            sqlx::query(
+                "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+            )
+            .bind(&message_id)
+            .bind(session_id)
+            .bind("user")
+            .bind(task)
+            .bind(&created_at)
+            .execute(&self.db)
+            .await?;
+        }
+
         let agent_run_id = Uuid::new_v4().to_string();
         let started_at = now_rfc3339();
 
@@ -867,7 +882,20 @@ impl AgentRunner {
                     .and_then(|function| function.get("arguments"))
                     .and_then(Value::as_str)
                 {
-                    entry.arguments.push_str(arguments_chunk);
+                    if entry.arguments.is_empty() {
+                        entry.arguments.push_str(arguments_chunk);
+                    } else if arguments_chunk.starts_with(&entry.arguments) {
+                        entry.arguments = arguments_chunk.to_string();
+                    } else if entry.arguments == arguments_chunk
+                        || entry.arguments.ends_with(arguments_chunk)
+                    {
+                    } else if serde_json::from_str::<Value>(&entry.arguments).is_ok() {
+                        if serde_json::from_str::<Value>(arguments_chunk).is_ok() {
+                            entry.arguments = arguments_chunk.to_string();
+                        }
+                    } else {
+                        entry.arguments.push_str(arguments_chunk);
+                    }
                 }
             }
         }

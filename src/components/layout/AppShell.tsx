@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { LeftSidebar } from '@/components/layout/LeftSidebar';
@@ -39,7 +39,6 @@ export const AppShell: React.FC = () => {
     selectedAgentType,
     agentConfigs,
   } = useAgentStore();
-  const unlistenRef = useRef<UnlistenFn[]>([]);
 
   useEffect(() => {
     const loadPersistedData = async () => {
@@ -101,6 +100,9 @@ export const AppShell: React.FC = () => {
   }, [setAgentConfigs]);
 
   useEffect(() => {
+    let cancelled = false;
+    const localUnlisten: UnlistenFn[] = [];
+
     const setup = async () => {
       const unlistenChatDone = await listen<string>('chat-done', () => {
         clearStreaming();
@@ -123,6 +125,10 @@ export const AppShell: React.FC = () => {
         parentAgentRunId: string | null;
       }>('agent-started', (event) => {
         const { agentRunId, agentType, parentAgentRunId } = event.payload;
+        if (useAgentStore.getState().agentRuns.some((r) => r.id === agentRunId)) {
+          return;
+        }
+
         const now = new Date().toISOString();
         const newRun: AgentRunWithTools = {
           id: agentRunId,
@@ -171,10 +177,15 @@ export const AppShell: React.FC = () => {
           createdAt: now,
         };
         updateAgentRun(agentRunId, {
-          toolCalls: [
-            ...(useAgentStore.getState().agentRuns.find((r) => r.id === agentRunId)?.toolCalls ?? []),
-            newToolCall,
-          ],
+          toolCalls: (() => {
+            const existing = useAgentStore
+              .getState()
+              .agentRuns.find((r) => r.id === agentRunId)?.toolCalls ?? [];
+            if (existing.some((tc) => tc.id === newToolCall.id)) {
+              return existing;
+            }
+            return [...existing, newToolCall];
+          })(),
         });
       });
 
@@ -241,7 +252,7 @@ export const AppShell: React.FC = () => {
         setPendingPermission(req);
       });
 
-      unlistenRef.current = [
+      localUnlisten.push(
         unlistenChatDone,
         unlistenChatError,
         unlistenAgentStarted,
@@ -251,13 +262,18 @@ export const AppShell: React.FC = () => {
         unlistenAgentDone,
         unlistenAgentError,
         unlistenPermission,
-      ];
+      );
+
+      if (cancelled) {
+        localUnlisten.forEach((fn) => fn());
+      }
     };
 
-    setup();
+    void setup();
 
     return () => {
-      unlistenRef.current.forEach((fn) => fn());
+      cancelled = true;
+      localUnlisten.forEach((fn) => fn());
     };
   }, [
     clearStreaming,
