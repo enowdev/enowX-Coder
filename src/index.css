@@ -56,7 +56,11 @@ body {
   background-color: var(--border);
 }
 
-input:focus, textarea:focus, button:focus {
-  outline: 1px solid rgba(255,255,255,0.4);
+* {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 1px solid rgba(255,255,255,0.25);
   outline-offset: 2px;
 }
