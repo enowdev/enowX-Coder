@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { Copy, Check } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
@@ -19,7 +20,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, children }) =>
 
   if (inline) {
     return (
-      <code className="px-1.5 py-0.5 rounded text-[0.85em] font-mono bg-[var(--surface-2)] text-[var(--text-muted)]">
+      <code className="px-1.5 py-0.5 rounded text-[0.82em] font-mono bg-[var(--surface-3)] text-[#e2b96f] border border-[var(--border)]">
         {children}
       </code>
     );
@@ -32,7 +33,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, children }) =>
   };
 
   return (
-    <div className="my-3 rounded-xl overflow-hidden border border-[var(--border)]">
+    <div className="my-4 rounded-xl overflow-hidden border border-[var(--border)]">
       <div className="flex items-center justify-between px-4 py-2 bg-[var(--surface-3)] border-b border-[var(--border)]">
         <span className="text-[11px] font-mono font-semibold text-[var(--text-muted)] uppercase tracking-wider">
           {lang || 'code'}
@@ -45,7 +46,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, children }) =>
           {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre className="overflow-x-auto text-sm leading-relaxed bg-[var(--surface-2)]">
+      <pre className="overflow-x-auto text-[13px] leading-relaxed bg-[var(--surface-2)] p-4 m-0">
         <code className={className}>{children}</code>
       </pre>
     </div>
@@ -85,18 +86,17 @@ export const ChatMessage = React.memo<ChatMessageProps>(({ message }) => {
         </div>
         <span className="text-[11px] text-[var(--text-subtle)] font-medium">Assistant</span>
       </div>
-      <div className="w-full px-4 py-3 rounded-xl text-sm leading-relaxed bg-[var(--surface)] text-[var(--text)]">
-        <div className="prose prose-invert prose-sm max-w-none">
-          <ReactMarkdown
-            rehypePlugins={[rehypeHighlight]}
-            components={{
-              code: CodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>>,
-              pre: ({ children }) => <>{children}</>,
-            }}
-          >
-            {message.content}
-          </ReactMarkdown>
-        </div>
+      <div className="w-full px-4 py-3 rounded-xl bg-[var(--surface)] text-[var(--text)] ai-prose">
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={[rehypeHighlight]}
+          components={{
+            code: CodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>>,
+            pre: ({ children }) => <>{children}</>,
+          }}
+        >
+          {message.content}
+        </ReactMarkdown>
       </div>
     </div>
   );
