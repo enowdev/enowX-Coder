@@ -5,6 +5,7 @@ pub mod services;
 pub mod state;
 
 use state::AppState;
+use tauri::Manager;
 
 use crate::error::AppResult;
 
@@ -13,11 +14,7 @@ use crate::error::AppResult;
 pub async fn run() -> AppResult<()> {
     let _ = env_logger::try_init();
 
-    let app_state = AppState::new("sqlite://./enowx.db").await?;
-    sqlx::migrate!("./migrations").run(app_state.pool()).await?;
-
     tauri::Builder::default()
-        .manage(app_state)
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -38,6 +35,33 @@ pub async fn run() -> AppResult<()> {
             commands::provider::set_default_provider,
             commands::agent::list_agent_runs
         ])
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+            tauri::async_runtime::block_on(async move {
+                let data_dir = app_handle
+                    .path()
+                    .app_data_dir()
+                    .expect("failed to resolve app data dir");
+
+                std::fs::create_dir_all(&data_dir)
+                    .expect("failed to create app data dir");
+
+                let db_path = data_dir.join("enowx.db");
+                let db_url = format!("sqlite://{}?mode=rwc", db_path.display());
+
+                let app_state = AppState::new(&db_url)
+                    .await
+                    .expect("failed to initialize database");
+
+                sqlx::migrate!("./migrations")
+                    .run(app_state.pool())
+                    .await
+                    .expect("failed to run migrations");
+
+                app_handle.manage(app_state);
+            });
+            Ok(())
+        })
         .run(tauri::generate_context!(
             "/run/media/enow/SSD2/enowX-Coder/src-tauri/tauri.conf.json"
         ))?;
