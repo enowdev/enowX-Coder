@@ -15,8 +15,14 @@ export const StreamingMessage: React.FC = () => {
         <span className="text-[11px] text-[var(--text-subtle)] font-medium">Assistant</span>
       </div>
       <div className="w-full px-4 py-3 rounded-xl text-sm leading-relaxed bg-[var(--surface)] text-[var(--text)]">
-        <span className="whitespace-pre-wrap">{streamingText}</span>
-        <span className="inline-block w-0.5 h-4 bg-white/70 ml-0.5 align-middle animate-pulse" />
+        {streamingText ? (
+          <>
+            <span className="whitespace-pre-wrap">{streamingText}</span>
+            <span className="inline-block w-0.5 h-4 bg-white/70 ml-0.5 align-middle animate-pulse" />
+          </>
+        ) : (
+          <span className="text-[var(--text-subtle)] animate-pulse">Generating...</span>
+        )}
       </div>
     </div>
   );
