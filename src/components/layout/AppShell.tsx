@@ -39,20 +39,25 @@ export const AppShell: React.FC = () => {
           return;
         }
 
+        const allSessions = (
+          await Promise.all(
+            projects.map((p) => invoke<Session[]>('list_sessions', { projectId: p.id }))
+          )
+        ).flat();
+        setSessions(allSessions);
+
         const activeProject = [...projects].sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         )[0];
         setActiveProjectId(activeProject.id);
 
-        const sessions = await invoke<Session[]>('list_sessions', { projectId: activeProject.id });
-        setSessions(sessions);
-
-        if (sessions.length === 0) {
+        const projectSessions = allSessions.filter((s) => s.projectId === activeProject.id);
+        if (projectSessions.length === 0) {
           setActiveSessionId(null);
           return;
         }
 
-        const activeSession = [...sessions].sort(
+        const activeSession = [...projectSessions].sort(
           (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
         )[0];
         setActiveSessionId(activeSession.id);

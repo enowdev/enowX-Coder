@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useProjectStore } from '@/stores/useProjectStore';
@@ -13,6 +13,11 @@ export const SessionList: React.FC = () => {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     return new Set(activeProjectId ? [activeProjectId] : []);
   });
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    setExpandedProjects((prev) => new Set(prev).add(activeProjectId));
+  }, [activeProjectId]);
 
   const toggleProject = (projectId: string) => {
     setExpandedProjects((prev) => {
