@@ -26,7 +26,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
   const resize = useCallback(() => {
     const ta = textareaRef.current;
     if (!ta) return;
-    ta.style.height = 'auto';
+    ta.style.height = '0px';
     ta.style.height = `${Math.min(ta.scrollHeight, MAX_HEIGHT)}px`;
   }, []);
 
@@ -71,13 +71,13 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
           placeholder="How can I help you today?"
           rows={1}
           className={cn(
-            'w-full resize-none bg-transparent px-4 pt-4 pb-2',
+            'w-full resize-none bg-transparent px-4 pt-3 pb-2',
             'text-sm leading-relaxed text-[var(--text)]',
             'placeholder:text-[var(--text-subtle)]',
             'custom-scrollbar',
             isStreaming && 'opacity-50 cursor-not-allowed'
           )}
-          style={{ minHeight: '52px', maxHeight: `${MAX_HEIGHT}px`, outline: 'none' }}
+          style={{ minHeight: '24px', maxHeight: `${MAX_HEIGHT}px`, outline: 'none' }}
         />
 
         <div className="flex items-center justify-between px-3 pb-3 pt-1 gap-2">
