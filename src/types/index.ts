@@ -59,3 +59,68 @@ export interface AgentRun {
   completedAt?: string;
   createdAt: string;
 }
+
+export type AgentType =
+  | 'orchestrator'
+  | 'planner'
+  | 'coder_fe'
+  | 'coder_be'
+  | 'security'
+  | 'ux_researcher'
+  | 'ui_designer'
+  | 'tester'
+  | 'reviewer'
+  | 'researcher'
+  | 'librarian';
+
+export const SELECTABLE_AGENTS: AgentType[] = ['orchestrator', 'planner'];
+
+export const AGENT_LABELS: Record<AgentType, string> = {
+  orchestrator: 'Orchestrator',
+  planner: 'Planner',
+  coder_fe: 'Coder FE',
+  coder_be: 'Coder BE',
+  security: 'Security',
+  ux_researcher: 'UX Researcher',
+  ui_designer: 'UI Designer',
+  tester: 'Tester',
+  reviewer: 'Reviewer',
+  researcher: 'Researcher',
+  librarian: 'Librarian',
+};
+
+export interface AgentConfig {
+  id: string;
+  agentType: AgentType;
+  providerId: string | null;
+  modelId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ToolCall {
+  id: string;
+  agentRunId: string;
+  toolName: 'read_file' | 'write_file' | 'list_dir' | 'search_files' | 'run_command' | 'web_search';
+  input: string;
+  output: string | null;
+  status: 'pending' | 'running' | 'completed' | 'failed';
+  error: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+}
+
+export interface AgentRunWithTools extends AgentRun {
+  toolCalls: ToolCall[];
+  streamingText: string;
+  parentAgentRunId: string | null;
+  projectPath: string | null;
+}
+
+export interface PermissionRequest {
+  type: 'sensitive_file' | 'outside_sandbox';
+  path: string;
+  agentType: AgentType;
+  agentRunId: string;
+}

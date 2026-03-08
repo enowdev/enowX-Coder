@@ -9,13 +9,16 @@ use crate::{
 use super::now_rfc3339;
 
 pub async fn create_session(db: &SqlitePool, project_id: &str, title: &str) -> AppResult<Session> {
-    let project_exists = sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM projects WHERE id = ?1")
-        .bind(project_id)
-        .fetch_one(db)
-        .await?;
+    let project_exists =
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(1) FROM projects WHERE id = ?1")
+            .bind(project_id)
+            .fetch_one(db)
+            .await?;
 
     if project_exists == 0 {
-        return Err(AppError::NotFound(format!("Project not found: {project_id}")));
+        return Err(AppError::NotFound(format!(
+            "Project not found: {project_id}"
+        )));
     }
 
     let normalized_title = if title.trim().is_empty() {
@@ -74,7 +77,9 @@ pub async fn delete_session(db: &SqlitePool, id: &str) -> AppResult<()> {
 pub async fn update_session_title(db: &SqlitePool, id: &str, title: &str) -> AppResult<()> {
     let normalized_title = title.trim();
     if normalized_title.is_empty() {
-        return Err(AppError::Validation("Session title cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Session title cannot be empty".to_string(),
+        ));
     }
 
     let now = now_rfc3339();

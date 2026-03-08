@@ -1,8 +1,10 @@
 pub mod commands;
+pub mod agents;
 pub mod error;
 pub mod models;
 pub mod services;
 pub mod state;
+pub mod tools;
 
 use state::AppState;
 use tauri::Manager;
@@ -37,7 +39,12 @@ pub fn run() -> Result<(), AppError> {
             commands::provider::list_provider_models,
             commands::provider::upsert_provider_model,
             commands::provider::delete_provider_model,
-            commands::agent::list_agent_runs
+            commands::agent::list_agent_runs,
+            commands::agent::run_agent,
+            commands::agent::cancel_agent,
+            commands::agent::get_agent_config,
+            commands::agent::upsert_agent_config,
+            commands::agent::list_agent_configs
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();

@@ -99,10 +99,9 @@ async fn fetch_anthropic_models(api_key: Option<&str>) -> AppResult<Vec<String>>
         )));
     }
 
-    let list: AnthropicModelList = resp
-        .json()
-        .await
-        .map_err(|e| AppError::Internal(format!("Failed to parse Anthropic models response: {e}")))?;
+    let list: AnthropicModelList = resp.json().await.map_err(|e| {
+        AppError::Internal(format!("Failed to parse Anthropic models response: {e}"))
+    })?;
 
     let mut ids: Vec<String> = list.data.into_iter().map(|m| m.id).collect();
     ids.sort();

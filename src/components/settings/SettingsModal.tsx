@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { X, Wrench, Robot, GearSix } from '@phosphor-icons/react';
 import { useUIStore } from '@/stores/useUIStore';
 import { ProvidersTab } from './ProvidersTab';
+import { AgentsTab } from './AgentsTab';
 import { cn } from '@/lib/utils';
 
-type SettingsTab = 'providers' | 'tools' | 'system';
+type SettingsTab = 'providers' | 'agents' | 'tools' | 'system';
 
 export const SettingsModal: React.FC = () => {
   const { settingsOpen, setSettingsOpen } = useUIStore();
@@ -54,6 +55,18 @@ export const SettingsModal: React.FC = () => {
             Providers
           </button>
           <button
+            onClick={() => setActiveTab('agents')}
+            className={cn(
+              "px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2",
+              activeTab === 'agents'
+                ? "text-white border-white bg-white/5"
+                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-white/5"
+            )}
+          >
+            <Robot size={14} weight={activeTab === 'agents' ? "fill" : "regular"} />
+            Agents
+          </button>
+          <button
             onClick={() => setActiveTab('tools')}
             className={cn(
               "px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2",
@@ -79,8 +92,9 @@ export const SettingsModal: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-hidden bg-[var(--bg)] relative">
+        <div className="flex-1 overflow-hidden bg-[var(--bg)] relative p-6">
           {activeTab === 'providers' && <ProvidersTab />}
+          {activeTab === 'agents' && <AgentsTab />}
           
           {activeTab === 'tools' && (
             <div className="flex flex-col items-center justify-center h-full text-[var(--text-muted)]">

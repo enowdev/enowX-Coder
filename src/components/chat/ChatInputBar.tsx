@@ -11,7 +11,8 @@ import {
 import { useChatStore } from '@/stores/useChatStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { useSessionStore } from '@/stores/useSessionStore';
-import { ProviderModelConfig } from '@/types';
+import { useAgentStore } from '@/stores/useAgentStore';
+import { ProviderModelConfig, SELECTABLE_AGENTS, AGENT_LABELS } from '@/types';
 import { cn } from '@/lib/utils';
 
 interface ChatInputBarProps {
@@ -23,6 +24,7 @@ const MAX_HEIGHT = 200;
 export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
   const { isStreaming } = useChatStore();
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
+  const { selectedAgentType, setSelectedAgentType } = useAgentStore();
   const { providers, defaultProviderId, selectedModelId, setDefaultProviderId, setSelectedModelId } =
     useSettingsStore();
 
@@ -116,10 +118,27 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
         />
 
         <div className="flex items-center justify-between px-3 pb-3 pt-1 gap-2">
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-2">
+            <Select
+              value={selectedAgentType}
+              onValueChange={(val: any) => setSelectedAgentType(val)}
+              disabled={isStreaming || !activeSessionId}
+            >
+              <SelectTrigger className="h-7 text-[11px] max-w-[120px] bg-[var(--surface-3)] border-[var(--border)]">
+                <SelectValue placeholder="Agent" />
+              </SelectTrigger>
+              <SelectContent side="top" align="start">
+                {SELECTABLE_AGENTS.map((agent) => (
+                  <SelectItem key={agent} value={agent}>
+                    {AGENT_LABELS[agent]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
             <button
               type="button"
-              disabled={isStreaming}
+              disabled={isStreaming || !activeSessionId}
               className={cn(
                 'flex items-center justify-center w-8 h-8 rounded-lg transition-colors',
                 'text-[var(--text-subtle)] hover:text-[var(--text-muted)] hover:bg-white/5',

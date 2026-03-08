@@ -30,6 +30,10 @@ tokio-stream = "0.1"
 anyhow = "1"
 log = "0.4"
 env_logger = "0.11"
+walkdir = "2"
+globset = "0.4"
+regex = "1"
+urlencoding = "2"
 
 [profile.release]
 opt-level = 3

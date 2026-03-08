@@ -1,11 +1,6 @@
 use tauri::State;
 
-use crate::{
-    error::AppResult,
-    models::Session,
-    services::session_service,
-    state::AppState,
-};
+use crate::{error::AppResult, models::Session, services::session_service, state::AppState};
 
 #[tauri::command]
 pub async fn create_session(

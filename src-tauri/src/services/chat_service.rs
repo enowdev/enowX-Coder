@@ -2,8 +2,8 @@ use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::Value;
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Emitter};
 use tauri::ipc::Channel;
+use tauri::{AppHandle, Emitter};
 use uuid::Uuid;
 
 use crate::{
@@ -34,9 +34,16 @@ pub async fn send_message(
     on_token: Channel<String>,
     app_handle: &AppHandle,
 ) -> AppResult<()> {
-    let result =
-        send_message_inner(db, session_id, content, provider_id, model_id, on_token, app_handle)
-            .await;
+    let result = send_message_inner(
+        db,
+        session_id,
+        content,
+        provider_id,
+        model_id,
+        on_token,
+        app_handle,
+    )
+    .await;
     if let Err(ref error) = result {
         let _ = app_handle.emit("chat-error", error.to_string());
     }
@@ -54,7 +61,9 @@ async fn send_message_inner(
 ) -> AppResult<()> {
     let normalized = content.trim();
     if normalized.is_empty() {
-        return Err(AppError::Validation("Message content cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Message content cannot be empty".to_string(),
+        ));
     }
 
     let user_message = Message {

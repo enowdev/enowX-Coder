@@ -1,11 +1,6 @@
 use tauri::State;
 
-use crate::{
-    error::AppResult,
-    models::Provider,
-    services::provider_service,
-    state::AppState,
-};
+use crate::{error::AppResult, models::Provider, services::provider_service, state::AppState};
 
 #[tauri::command]
 pub async fn list_providers(state: State<'_, AppState>) -> AppResult<Vec<Provider>> {
@@ -67,11 +62,9 @@ pub async fn list_models(
     state: State<'_, AppState>,
     provider_id: String,
 ) -> AppResult<Vec<String>> {
-    let provider = crate::services::provider_service::get_provider_for_chat(
-        state.pool(),
-        Some(&provider_id),
-    )
-    .await?;
+    let provider =
+        crate::services::provider_service::get_provider_for_chat(state.pool(), Some(&provider_id))
+            .await?;
 
     crate::services::model_service::list_models(
         &provider.provider_type,

@@ -1,12 +1,7 @@
-use tauri::{AppHandle, State};
 use tauri::ipc::Channel;
+use tauri::{AppHandle, State};
 
-use crate::{
-    error::AppResult,
-    models::Message,
-    services::chat_service,
-    state::AppState,
-};
+use crate::{error::AppResult, models::Message, services::chat_service, state::AppState};
 
 #[tauri::command]
 pub async fn get_messages(

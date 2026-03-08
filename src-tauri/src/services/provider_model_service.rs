@@ -35,10 +35,14 @@ pub async fn upsert_provider_model(
         return Err(AppError::Validation("model_id cannot be empty".to_string()));
     }
     if max_tokens < 1 {
-        return Err(AppError::Validation("max_tokens must be at least 1".to_string()));
+        return Err(AppError::Validation(
+            "max_tokens must be at least 1".to_string(),
+        ));
     }
     if !(0.0..=2.0).contains(&temperature) {
-        return Err(AppError::Validation("temperature must be between 0.0 and 2.0".to_string()));
+        return Err(AppError::Validation(
+            "temperature must be between 0.0 and 2.0".to_string(),
+        ));
     }
 
     let now = now_rfc3339();
@@ -107,13 +111,12 @@ pub async fn delete_provider_model(
     provider_id: &str,
     model_id: &str,
 ) -> AppResult<()> {
-    let result = sqlx::query(
-        "DELETE FROM provider_models WHERE provider_id = ?1 AND model_id = ?2",
-    )
-    .bind(provider_id)
-    .bind(model_id)
-    .execute(db)
-    .await?;
+    let result =
+        sqlx::query("DELETE FROM provider_models WHERE provider_id = ?1 AND model_id = ?2")
+            .bind(provider_id)
+            .bind(model_id)
+            .execute(db)
+            .await?;
 
     if result.rows_affected() == 0 {
         return Err(AppError::NotFound(format!(

@@ -1,11 +1,15 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import { Sparkle } from '@phosphor-icons/react';
 import { useChatStore } from '@/stores/useChatStore';
+import { useAgentStore } from '@/stores/useAgentStore';
 import { ChatMessage } from './ChatMessage';
 import { StreamingMessage } from './StreamingMessage';
+import { AgentRunCard } from './AgentRunCard';
+import { Message, AgentRunWithTools } from '@/types';
 
 export const ChatPanel: React.FC = () => {
   const { messages, isStreaming, streamingText } = useChatStore();
+  const { agentRuns } = useAgentStore();
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const [atBottom, setAtBottom] = useState(true);
@@ -43,7 +47,7 @@ export const ChatPanel: React.FC = () => {
     }
   }, [isStreaming, scrollToBottom]);
 
-  if (messages.length === 0 && !isStreaming) {
+  if (messages.length === 0 && agentRuns.length === 0 && !isStreaming) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center text-center p-8 opacity-60">
         <div className="w-16 h-16 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] mb-4 flex items-center justify-center">
@@ -57,6 +61,12 @@ export const ChatPanel: React.FC = () => {
     );
   }
 
+  const topLevelRuns = agentRuns.filter(r => r.parentAgentRunId === null);
+  const combinedItems = [
+    ...messages.map(m => ({ type: 'message' as const, data: m, date: new Date(m.createdAt).getTime() })),
+    ...topLevelRuns.map(r => ({ type: 'agent' as const, data: r, date: new Date(r.createdAt).getTime() }))
+  ].sort((a, b) => a.date - b.date);
+
   return (
     <div className="flex-1 relative overflow-hidden min-h-0">
       <div
@@ -65,9 +75,13 @@ export const ChatPanel: React.FC = () => {
         className="h-full overflow-y-auto custom-scrollbar py-6"
       >
         <div className="max-w-3xl mx-auto w-full px-4 flex flex-col gap-4">
-          {messages.map((msg) => (
-            <ChatMessage key={msg.id} message={msg} />
-          ))}
+          {combinedItems.map((item) => {
+            if (item.type === 'message') {
+              return <ChatMessage key={item.data.id} message={item.data as Message} />;
+            } else {
+              return <AgentRunCard key={item.data.id} run={item.data as AgentRunWithTools} allRuns={agentRuns} />;
+            }
+          })}
           <StreamingMessage />
           <div ref={bottomRef} />
         </div>

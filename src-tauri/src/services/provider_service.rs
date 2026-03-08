@@ -33,7 +33,10 @@ pub async fn create_provider(
     let normalized_provider_type = provider_type.trim();
     let normalized_model = model.trim();
 
-    if normalized_name.is_empty() || normalized_provider_type.is_empty() || normalized_model.is_empty() {
+    if normalized_name.is_empty()
+        || normalized_provider_type.is_empty()
+        || normalized_model.is_empty()
+    {
         return Err(AppError::Validation(
             "Provider name, type, and model are required".to_string(),
         ));
@@ -44,7 +47,9 @@ pub async fn create_provider(
     } else {
         let u = base_url.trim().trim_end_matches('/');
         if u.is_empty() {
-            return Err(AppError::Validation("Base URL is required for this provider type".to_string()));
+            return Err(AppError::Validation(
+                "Base URL is required for this provider type".to_string(),
+            ));
         }
         u.to_string()
     };
@@ -102,7 +107,9 @@ pub async fn update_provider(
     let normalized_model = model.trim();
 
     if normalized_name.is_empty() || normalized_model.is_empty() {
-        return Err(AppError::Validation("Provider name and model are required".to_string()));
+        return Err(AppError::Validation(
+            "Provider name and model are required".to_string(),
+        ));
     }
 
     let resolved_base_url = if let Some(fixed) = fixed_base_url(&existing.provider_type) {
@@ -110,7 +117,9 @@ pub async fn update_provider(
     } else {
         let u = base_url.trim().trim_end_matches('/');
         if u.is_empty() {
-            return Err(AppError::Validation("Base URL is required for this provider type".to_string()));
+            return Err(AppError::Validation(
+                "Base URL is required for this provider type".to_string(),
+            ));
         }
         u.to_string()
     };
@@ -141,7 +150,9 @@ pub async fn delete_provider(db: &SqlitePool, id: &str) -> AppResult<()> {
     .ok_or_else(|| AppError::NotFound(format!("Provider not found: {id}")))?;
 
     if provider.is_builtin {
-        return Err(AppError::Validation("Built-in providers cannot be deleted".to_string()));
+        return Err(AppError::Validation(
+            "Built-in providers cannot be deleted".to_string(),
+        ));
     }
 
     sqlx::query("DELETE FROM providers WHERE id = ?1")
@@ -175,7 +186,10 @@ pub async fn set_default_provider(db: &SqlitePool, id: &str) -> AppResult<()> {
     Ok(())
 }
 
-pub async fn get_provider_for_chat(db: &SqlitePool, provider_id: Option<&str>) -> AppResult<Provider> {
+pub async fn get_provider_for_chat(
+    db: &SqlitePool,
+    provider_id: Option<&str>,
+) -> AppResult<Provider> {
     if let Some(id) = provider_id {
         let provider = sqlx::query_as::<_, Provider>(&format!(
             "SELECT {SELECT_COLS} FROM providers WHERE id = ?1"

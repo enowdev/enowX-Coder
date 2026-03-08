@@ -3,17 +3,15 @@ use sqlx::FromRow;
 
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 #[serde(rename_all = "camelCase")]
-pub struct AgentRun {
+pub struct ToolCall {
     pub id: String,
-    pub session_id: String,
-    pub agent_type: String,
-    pub status: String,
-    pub input: Option<String>,
+    pub agent_run_id: String,
+    pub tool_name: String,
+    pub input: String,
     pub output: Option<String>,
+    pub status: String,
     pub error: Option<String>,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
     pub created_at: String,
-    pub parent_agent_run_id: Option<String>,
-    pub project_path: Option<String>,
 }

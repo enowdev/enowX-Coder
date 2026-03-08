@@ -11,7 +11,9 @@ use super::now_rfc3339;
 pub async fn create_project(db: &SqlitePool, name: &str, path: Option<&str>) -> AppResult<Project> {
     let trimmed_name = name.trim();
     if trimmed_name.is_empty() {
-        return Err(AppError::Validation("Project name cannot be empty".to_string()));
+        return Err(AppError::Validation(
+            "Project name cannot be empty".to_string(),
+        ));
     }
 
     let now = now_rfc3339();
