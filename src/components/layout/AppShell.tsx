@@ -4,6 +4,7 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import { LeftSidebar } from '@/components/layout/LeftSidebar';
 import { RightSidebar } from '@/components/layout/RightSidebar';
 import { ChatHeader } from '@/components/layout/ChatHeader';
+import { AppFooter } from '@/components/layout/AppFooter';
 import { ChatPanel } from '@/components/chat/ChatPanel';
 import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { useChatStore } from '@/stores/useChatStore';
@@ -85,16 +86,18 @@ export const AppShell: React.FC = () => {
   };
 
   return (
-    <div className="app-grid h-screen w-screen overflow-hidden bg-[var(--bg)] text-[var(--text)]">
+    <div className="app-grid bg-[var(--bg)] text-[var(--text)]">
       <LeftSidebar />
 
-      <main className="flex flex-col h-full overflow-hidden">
+      <main className="flex flex-col overflow-hidden">
         <ChatHeader />
         <ChatPanel />
         <ChatInputBar onSend={handleSend} />
       </main>
 
       <RightSidebar />
+
+      <AppFooter />
     </div>
   );
 };

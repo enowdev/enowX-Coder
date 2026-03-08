@@ -34,6 +34,7 @@ body {
 .app-grid {
   display: grid;
   grid-template-columns: var(--sidebar-width-left) 1fr var(--sidebar-width-right);
+  grid-template-rows: 1fr auto;
   height: 100vh;
   width: 100vw;
 }
