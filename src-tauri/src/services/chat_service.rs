@@ -148,13 +148,10 @@ async fn send_openai_compatible(
         "temperature": 0.2,
         "presence_penalty": 0.0,
         "frequency_penalty": 0.0,
-        "extra_body": {
-            "language": "follow_user"
-        },
         "stream": true,
     });
 
-    let language_guard = "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian.";
+    let language_guard = "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.";
     let payload_with_language = if let Some(arr) = payload.get("messages").and_then(Value::as_array) {
         let mut updated = arr.clone();
         updated.insert(
@@ -215,7 +212,7 @@ async fn send_anthropic(
         "stream": true,
     });
 
-    let language_guard = "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian.";
+    let language_guard = "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.";
     if let Some(sys) = system_msgs.first() {
         payload["system"] = serde_json::json!(format!("{}\n\n{}", sys.content, language_guard));
     } else {

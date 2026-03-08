@@ -71,6 +71,48 @@ body {
 
 .ai-prose-readable { font-size: 0.95rem; line-height: 1.8; color: var(--text); }
 
+.ai-prose-readable p { margin: 0 0 0.85rem; }
+.ai-prose-readable p:last-child { margin-bottom: 0; }
+
+.ai-prose-readable h1,
+.ai-prose-readable h2,
+.ai-prose-readable h3 {
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+
+.ai-prose-readable h1 { font-size: 1.35rem; }
+.ai-prose-readable h2 { font-size: 1.18rem; }
+.ai-prose-readable h3 { font-size: 1.04rem; }
+
+.ai-prose-readable ul,
+.ai-prose-readable ol {
+  margin: 0.55rem 0 0.9rem 1.35rem;
+}
+
+.ai-prose-readable li { margin: 0.28rem 0; }
+
+.ai-prose-readable blockquote {
+  border-left: 3px solid var(--border-strong);
+  background: linear-gradient(to right, var(--surface-2), transparent);
+  border-radius: 0.35rem;
+  padding: 0.4rem 0.75rem;
+  margin: 0.9rem 0;
+  color: #c8c8c8;
+}
+
+.ai-prose-readable code {
+  font-size: 0.86em;
+}
+
+.ai-prose-readable table {
+  font-size: 0.86rem;
+}
+
+.ai-prose-readable td {
+  color: #d0d0d0;
+}
+
 .ai-prose p { margin: 0 0 0.75rem; }
 .ai-prose p:last-child { margin-bottom: 0; }
 

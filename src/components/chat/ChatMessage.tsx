@@ -40,21 +40,21 @@ const segmentMeta: Record<
   thinking: {
     label: 'Thinking',
     icon: Brain,
-    wrapperClass: 'bg-[var(--surface-2)] border border-[var(--border)]',
+    wrapperClass: 'bg-[var(--surface-2)] border border-[var(--border)] shadow-[inset_0_1px_0_rgba(255,255,255,0.03)]',
     headerClass: 'border-b border-[var(--border)] bg-[var(--surface-3)]',
     iconClass: 'text-[var(--text-muted)]',
   },
   tool: {
     label: 'Tool Execution',
     icon: Wrench,
-    wrapperClass: 'bg-[var(--surface-2)] border border-[var(--border-strong)]',
+    wrapperClass: 'bg-[var(--surface-2)] border border-[var(--border-strong)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
     headerClass: 'border-b border-[var(--border-strong)] bg-[var(--surface-3)]',
     iconClass: 'text-[var(--text-muted)]',
   },
   response: {
     label: 'Response',
     icon: ChatCircleText,
-    wrapperClass: 'bg-[var(--surface)] border border-[var(--border)]',
+    wrapperClass: 'bg-[var(--surface)] border border-[var(--border-strong)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]',
     headerClass: 'border-b border-[var(--border)] bg-[var(--surface-2)]',
     iconClass: 'text-[var(--text-muted)]',
   },
@@ -67,7 +67,7 @@ const CodeBlock: React.FC<CodeBlockProps> = ({ inline, className, children }) =>
 
   if (inline) {
     return (
-      <code className="px-1.5 py-0.5 rounded text-[0.82em] font-mono bg-[var(--surface-3)] text-[#e2b96f] border border-[var(--border)]">
+      <code className="px-1.5 py-0.5 rounded text-[0.84em] font-mono bg-[var(--surface-3)] text-[var(--text)] border border-[var(--border)]">
         {children}
       </code>
     );
@@ -176,7 +176,7 @@ const parseAssistantSegments = (rawContent: string): AssistantSegment[] => {
     return [{ type: 'response', content }];
   }
 
-  return segments;
+  return segments.filter((segment) => segment.content.trim().length > 0);
 };
 
 interface ChatMessageProps {
@@ -212,10 +212,10 @@ export const ChatMessage = React.memo<ChatMessageProps>(({ message }) => {
         <div className="w-6 h-6 rounded-md bg-[var(--surface-3)] border border-[var(--border)] flex items-center justify-center text-[10px] font-bold text-white shrink-0">
           AI
         </div>
-        <span className="text-[12px] text-[var(--text-muted)] font-medium">Assistant</span>
+        <span className="text-[12px] text-[var(--text-muted)] font-semibold tracking-wide">Assistant</span>
       </div>
 
-      <div className="flex flex-col gap-3 w-full">
+      <div className="flex flex-col gap-3.5 w-full">
         {segments.map((segment, index) => {
           const meta = segmentMeta[segment.type];
           const Icon = meta.icon;
@@ -223,11 +223,11 @@ export const ChatMessage = React.memo<ChatMessageProps>(({ message }) => {
             <div key={`${message.id}-${segment.type}-${index}`} className={cn('w-full rounded-xl overflow-hidden', meta.wrapperClass)}>
               <div className={cn('flex items-center gap-2 px-3 py-2', meta.headerClass)}>
                 <Icon size={14} weight="duotone" className={meta.iconClass} />
-                <span className="text-[11px] font-semibold tracking-wide uppercase text-[var(--text-muted)]">
+                <span className="text-[11px] font-bold tracking-[0.12em] uppercase text-[var(--text-muted)]">
                   {segment.title ? segment.title : meta.label}
                 </span>
               </div>
-              <div className="px-4 py-3 ai-prose ai-prose-readable">
+              <div className="px-5 py-4 ai-prose ai-prose-readable">
                 <ReactMarkdown
                   remarkPlugins={[remarkGfm]}
                   rehypePlugins={[rehypeHighlight]}

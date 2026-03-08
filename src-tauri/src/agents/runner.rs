@@ -19,7 +19,7 @@ use crate::tools::{ToolCall, ToolExecutor, ToolName};
 const MAX_REACT_ITERATIONS: usize = 20;
 const SYNTHESIS_REACT_ITERATIONS: usize = 8;
 const LANGUAGE_GUARD: &str =
-    "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian.";
+    "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.";
 
 #[derive(Clone)]
 pub struct AgentRunner {
