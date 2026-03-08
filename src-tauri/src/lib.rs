@@ -34,6 +34,9 @@ pub fn run() -> Result<(), AppError> {
             commands::provider::delete_provider,
             commands::provider::set_default_provider,
             commands::provider::list_models,
+            commands::provider::list_provider_models,
+            commands::provider::upsert_provider_model,
+            commands::provider::delete_provider_model,
             commands::agent::list_agent_runs
         ])
         .setup(|app| {

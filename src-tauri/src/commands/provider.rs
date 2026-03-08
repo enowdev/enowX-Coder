@@ -80,3 +80,45 @@ pub async fn list_models(
     )
     .await
 }
+
+#[tauri::command]
+pub async fn list_provider_models(
+    state: State<'_, AppState>,
+    provider_id: String,
+) -> AppResult<Vec<crate::models::ProviderModelConfig>> {
+    crate::services::provider_model_service::list_provider_models(state.pool(), &provider_id).await
+}
+
+#[tauri::command]
+pub async fn upsert_provider_model(
+    state: State<'_, AppState>,
+    provider_id: String,
+    model_id: String,
+    enabled: bool,
+    max_tokens: i64,
+    temperature: f64,
+) -> AppResult<crate::models::ProviderModelConfig> {
+    crate::services::provider_model_service::upsert_provider_model(
+        state.pool(),
+        &provider_id,
+        &model_id,
+        enabled,
+        max_tokens,
+        temperature,
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn delete_provider_model(
+    state: State<'_, AppState>,
+    provider_id: String,
+    model_id: String,
+) -> AppResult<()> {
+    crate::services::provider_model_service::delete_provider_model(
+        state.pool(),
+        &provider_id,
+        &model_id,
+    )
+    .await
+}

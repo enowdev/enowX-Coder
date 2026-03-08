@@ -15,6 +15,7 @@ export interface Session {
 }
 
 export interface Message {
+
   id: string;
   sessionId: string;
   role: 'user' | 'assistant' | 'system';
@@ -31,6 +32,17 @@ export interface Provider {
   model: string;
   isDefault: boolean;
   isBuiltin: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProviderModelConfig {
+  id: string;
+  providerId: string;
+  modelId: string;
+  enabled: boolean;
+  maxTokens: number;
+  temperature: number;
   createdAt: string;
   updatedAt: string;
 }
