@@ -33,6 +33,7 @@ export const AppShell: React.FC = () => {
     setAgentRuns,
     updateAgentRun,
     appendAgentToken,
+    flushThinkingBlock,
     setAgentConfigs,
     setPendingPermission,
     pendingPermission,
@@ -143,6 +144,7 @@ export const AppShell: React.FC = () => {
           createdAt: now,
           toolCalls: [],
           streamingText: '',
+          thinkingBlocks: [],
           parentAgentRunId: parentAgentRunId,
           projectPath: null,
         };
@@ -163,6 +165,7 @@ export const AppShell: React.FC = () => {
         input: unknown;
       }>('agent-tool-call', (event) => {
         const { toolCallId, agentRunId, toolName, input } = event.payload;
+        flushThinkingBlock(agentRunId);
         const now = new Date().toISOString();
         const newToolCall: ToolCall = {
           id: toolCallId,
@@ -215,6 +218,7 @@ export const AppShell: React.FC = () => {
         'agent-done',
         (event) => {
           const { agentRunId, output } = event.payload;
+          flushThinkingBlock(agentRunId);
           updateAgentRun(agentRunId, {
             status: 'completed',
             output,
@@ -227,6 +231,7 @@ export const AppShell: React.FC = () => {
         'agent-error',
         (event) => {
           const { agentRunId, error } = event.payload;
+          flushThinkingBlock(agentRunId);
           updateAgentRun(agentRunId, {
             status: 'failed',
             error,
@@ -277,6 +282,7 @@ export const AppShell: React.FC = () => {
     clearStreaming,
     addAgentRun,
     appendAgentToken,
+    flushThinkingBlock,
     updateAgentRun,
     setPendingPermission,
   ]);
@@ -299,6 +305,7 @@ export const AppShell: React.FC = () => {
               ...run,
               toolCalls,
               streamingText: '',
+              thinkingBlocks: [],
               parentAgentRunId: run.parentAgentRunId ?? null,
               projectPath: run.projectPath ?? null,
             } as AgentRunWithTools;

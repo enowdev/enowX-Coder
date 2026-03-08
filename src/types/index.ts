@@ -116,6 +116,7 @@ export interface ToolCall {
 export interface AgentRunWithTools extends AgentRun {
   toolCalls: ToolCall[];
   streamingText: string;
+  thinkingBlocks: string[];
   parentAgentRunId: string | null;
   projectPath: string | null;
 }

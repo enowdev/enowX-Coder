@@ -50,9 +50,13 @@ export function AgentRunCard({ run, allRuns }: AgentRunCardProps) {
   const children = allRuns.filter((r) => r.parentAgentRunId === run.id);
   const hasToolActivity = (run.toolCalls?.length ?? 0) > 0;
   const normalizedStream = run.streamingText.trim();
+  const normalizedBlocks = run.thinkingBlocks.filter((block) => block.trim().length > 0);
 
   const thinkingText = useMemo(() => {
     let captured = normalizedStream;
+    if (captured.length === 0 && normalizedBlocks.length > 0) {
+      captured = normalizedBlocks[normalizedBlocks.length - 1].trim();
+    }
 
     if (run.status === 'completed' && run.output && captured) {
       const outputTrim = run.output.trim();
@@ -72,7 +76,48 @@ export function AgentRunCard({ run, allRuns }: AgentRunCardProps) {
     if (run.status === 'completed') return 'No explicit reasoning trace emitted by the model.';
 
     return 'Pending execution...';
-  }, [run.status, run.output, run.error, hasToolActivity, normalizedStream]);
+  }, [run.status, run.output, run.error, hasToolActivity, normalizedBlocks, normalizedStream]);
+
+  const toolSliceBoundary = useMemo(() => {
+    if (!run.toolCalls || run.toolCalls.length === 0) return -1;
+    const maxLen = 220;
+    const source = normalizedBlocks.length > 0 ? normalizedBlocks.join('\n\n') : normalizedStream;
+    if (!source) return -1;
+
+    let boundary = -1;
+    for (const tool of run.toolCalls) {
+      const needle = tool.toolName.toLowerCase();
+      const idx = source.toLowerCase().indexOf(needle);
+      if (idx !== -1) {
+        const candidate = Math.max(0, idx - maxLen);
+        boundary = boundary === -1 ? candidate : Math.min(boundary, candidate);
+      }
+    }
+    return boundary;
+  }, [run.toolCalls, normalizedBlocks, normalizedStream]);
+
+  const orderedThinkingBlocks = useMemo(() => {
+    const blocks: string[] = [];
+    for (const block of normalizedBlocks) {
+      if (!blocks.includes(block)) blocks.push(block);
+    }
+    if (normalizedStream.length > 0 && !blocks.includes(normalizedStream)) {
+      blocks.push(normalizedStream);
+    }
+
+    if (toolSliceBoundary >= 0 && blocks.length > 0) {
+      const merged = blocks.join('\n\n').trim();
+      const sliced = merged.slice(0, toolSliceBoundary).trim();
+      if (sliced.length > 0) {
+        return sliced
+          .split(/\n\n+/)
+          .map((s) => s.trim())
+          .filter((s) => s.length > 0);
+      }
+    }
+
+    return blocks;
+  }, [normalizedBlocks, normalizedStream, toolSliceBoundary]);
 
   return (
     <div
@@ -95,20 +140,47 @@ export function AgentRunCard({ run, allRuns }: AgentRunCardProps) {
         </div>
 
         <div className="p-3 space-y-3">
-          <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden">
-            <button
-              onClick={() => setThinkingOpen((v) => !v)}
-              className="w-full flex items-center justify-between px-3 py-2 text-left"
-            >
-              <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-[var(--text-muted)]">
-                <Brain size={13} weight="duotone" />
-                <span>Thinking</span>
-              </div>
-              {thinkingOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
-            </button>
-            {thinkingOpen && (
-              <div className="px-3 pb-3 text-[12px] leading-relaxed text-[var(--text)] whitespace-pre-wrap">
-                {thinkingText}
+          <section className="space-y-2">
+            {orderedThinkingBlocks.length > 0 ? (
+              orderedThinkingBlocks.map((block, index) => (
+                <div
+                  key={`${run.id}-thinking-${index}`}
+                  className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden"
+                >
+                  <button
+                    onClick={() => setThinkingOpen((v) => !v)}
+                    className="w-full flex items-center justify-between px-3 py-2 text-left"
+                  >
+                    <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-[var(--text-muted)]">
+                      <Brain size={13} weight="duotone" />
+                      <span>Thinking {orderedThinkingBlocks.length > 1 ? `#${index + 1}` : ''}</span>
+                    </div>
+                    {thinkingOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
+                  </button>
+                  {thinkingOpen && (
+                    <div className="px-3 pb-3 text-[12px] leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+                      {block}
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : (
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden">
+                <button
+                  onClick={() => setThinkingOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 text-left"
+                >
+                  <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-[var(--text-muted)]">
+                    <Brain size={13} weight="duotone" />
+                    <span>Thinking</span>
+                  </div>
+                  {thinkingOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
+                </button>
+                {thinkingOpen && (
+                  <div className="px-3 pb-3 text-[12px] leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+                    {thinkingText}
+                  </div>
+                )}
               </div>
             )}
           </section>

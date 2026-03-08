@@ -11,6 +11,7 @@ interface AgentState {
   addAgentRun: (run: AgentRunWithTools) => void;
   updateAgentRun: (id: string, patch: Partial<AgentRunWithTools>) => void;
   appendAgentToken: (id: string, token: string) => void;
+  flushThinkingBlock: (id: string) => void;
   clearAgentStreaming: (id: string) => void;
 
   setAgentConfigs: (configs: AgentConfig[]) => void;
@@ -37,6 +38,19 @@ export const useAgentStore = create<AgentState>((set) => ({
       agentRuns: state.agentRuns.map((r) =>
         r.id === id ? { ...r, streamingText: r.streamingText + token } : r,
       ),
+    })),
+  flushThinkingBlock: (id) =>
+    set((state) => ({
+      agentRuns: state.agentRuns.map((r) => {
+        if (r.id !== id) return r;
+        const text = r.streamingText.trim();
+        if (!text) return r;
+        return {
+          ...r,
+          thinkingBlocks: [...r.thinkingBlocks, text],
+          streamingText: '',
+        };
+      }),
     })),
   clearAgentStreaming: (id) =>
     set((state) => ({
