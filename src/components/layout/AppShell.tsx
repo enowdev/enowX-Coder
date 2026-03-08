@@ -5,7 +5,7 @@ import { LeftSidebar } from '@/components/layout/LeftSidebar';
 import { RightSidebar } from '@/components/layout/RightSidebar';
 import { ChatHeader } from '@/components/layout/ChatHeader';
 import { ChatPanel } from '@/components/chat/ChatPanel';
-import { ChatInput } from '@/components/chat/ChatInput';
+import { ChatInputBar } from '@/components/chat/ChatInputBar';
 import { useChatStore } from '@/stores/useChatStore';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
@@ -91,7 +91,7 @@ export const AppShell: React.FC = () => {
       <main className="flex flex-col h-full overflow-hidden">
         <ChatHeader />
         <ChatPanel />
-        <ChatInput onSend={handleSend} />
+        <ChatInputBar onSend={handleSend} />
       </main>
 
       <RightSidebar />
