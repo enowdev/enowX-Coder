@@ -1,18 +1,18 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSettingsStore } from '@/stores/useSettingsStore';
 import { Provider, ProviderModelConfig } from '@/types';
 import {
-  Plus,
   Trash,
   PencilSimple,
   Check,
   X,
-  Robot,
   ArrowsClockwise,
   Sparkle,
   CaretDown,
   CaretRight,
+  CheckSquare,
+  Square,
 } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 
@@ -25,95 +25,48 @@ const FIXED_BASE_URL: Record<string, boolean> = {
   gemini: true,
 };
 
-const PROVIDER_PRESETS: Record<ProviderType, { label: string; providerType: ProviderType; baseUrl: string; model: string }> = {
-  enowxlabs: { label: 'enowX Labs', providerType: 'enowxlabs', baseUrl: 'https://api.enowxlabs.com/v1', model: 'enowx-default' },
-  openai: { label: 'OpenAI', providerType: 'openai', baseUrl: 'https://api.openai.com/v1', model: 'gpt-4o' },
-  anthropic: { label: 'Anthropic', providerType: 'anthropic', baseUrl: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-20241022' },
-  gemini: { label: 'Gemini', providerType: 'gemini', baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash' },
-  ollama: { label: 'Ollama', providerType: 'ollama', baseUrl: 'http://localhost:11434/v1', model: 'llama3.2' },
-  custom: { label: 'Custom', providerType: 'custom', baseUrl: '', model: '' },
+const PROVIDER_PRESETS: Record<ProviderType, { label: string; baseUrl: string; model: string }> = {
+  enowxlabs: { label: 'enowX Labs', baseUrl: 'https://api.enowxlabs.com/v1', model: 'enowx-default' },
+  openai:     { label: 'OpenAI',     baseUrl: 'https://api.openai.com/v1',    model: 'gpt-4o' },
+  anthropic:  { label: 'Anthropic',  baseUrl: 'https://api.anthropic.com/v1', model: 'claude-3-5-sonnet-20241022' },
+  gemini:     { label: 'Gemini',     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash' },
+  ollama:     { label: 'Ollama',     baseUrl: 'http://localhost:11434/v1',     model: 'llama3.2' },
+  custom:     { label: 'Custom',     baseUrl: '',                              model: '' },
 };
 
-interface ProviderFormData {
-  name: string;
-  providerType: ProviderType;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
-
-const defaultForm: ProviderFormData = {
-  name: '',
-  providerType: 'openai',
-  baseUrl: 'https://api.openai.com/v1',
-  apiKey: '',
-  model: 'gpt-4o',
-};
-
-function ProviderIcon({ type, isBuiltin }: { type: string; isBuiltin: boolean }) {
-  if (isBuiltin) {
-    return (
-      <div className="w-5 h-5 rounded-md bg-white/5 flex items-center justify-center text-[var(--text-muted)]">
-        <Sparkle size={12} weight="fill" />
-      </div>
-    );
-  }
-  
-  let colorClass = "bg-[var(--text-muted)]";
-  if (type === 'openai') colorClass = "bg-green-500/50";
-  if (type === 'anthropic') colorClass = "bg-amber-700/50";
-  if (type === 'gemini') colorClass = "bg-blue-500/50";
-  if (type === 'ollama') colorClass = "bg-white/80";
-  if (type === 'enowxlabs') colorClass = "bg-purple-500/50";
-
-  return <div className={cn("w-2 h-2 rounded-full", colorClass)} />;
-}
+const SIDEBAR_ITEMS: ProviderType[] = ['enowxlabs', 'openai', 'anthropic', 'gemini', 'ollama', 'custom'];
 
 interface ModelRowProps {
-  providerId: string;
   modelName: string;
   config?: ProviderModelConfig;
-  onUpdate: (config: Partial<ProviderModelConfig> & { modelId: string }) => void;
+  onUpdate: (modelId: string, patch: { enabled?: boolean; contextWindow?: number; temperature?: number }) => void;
 }
 
 const ModelRow: React.FC<ModelRowProps> = ({ modelName, config, onUpdate }) => {
   const [expanded, setExpanded] = useState(false);
-  const [maxTokens, setMaxTokens] = useState(config?.maxTokens ?? 4096);
+  const [contextWindow, setContextWindow] = useState(config?.maxTokens ?? 4096);
   const [temperature, setTemperature] = useState(config?.temperature ?? 0.7);
   const [isDirty, setIsDirty] = useState(false);
 
   useEffect(() => {
-    setMaxTokens(config?.maxTokens ?? 4096);
+    setContextWindow(config?.maxTokens ?? 4096);
     setTemperature(config?.temperature ?? 0.7);
     setIsDirty(false);
   }, [config]);
 
   const handleSave = () => {
-    onUpdate({
-      modelId: modelName,
-      maxTokens,
-      temperature,
-      enabled: config?.enabled ?? false,
-    });
+    onUpdate(modelName, { contextWindow, temperature });
     setIsDirty(false);
   };
 
   const toggleEnabled = () => {
-    onUpdate({
-      modelId: modelName,
-      enabled: !(config?.enabled ?? false),
-      maxTokens,
-      temperature
-    });
+    onUpdate(modelName, { enabled: !(config?.enabled ?? false) });
   };
 
   return (
-    <div className="group border-b border-[var(--border)] last:border-0">
-      <div className="flex items-center gap-3 py-3 px-1 hover:bg-white/[0.02] transition-colors rounded-lg">
-        <div 
-          className="relative flex items-center justify-center w-5 h-5 cursor-pointer"
-          onClick={toggleEnabled}
-        >
+    <div className="border-b border-[var(--border)] last:border-0">
+      <div className="flex items-center gap-3 py-2.5 px-3 hover:bg-white/[0.02] transition-colors">
+        <div className="relative flex items-center justify-center w-5 h-5 cursor-pointer shrink-0" onClick={toggleEnabled}>
           <input
             type="checkbox"
             checked={config?.enabled ?? false}
@@ -122,48 +75,47 @@ const ModelRow: React.FC<ModelRowProps> = ({ modelName, config, onUpdate }) => {
           />
           <Check size={10} weight="bold" className="absolute text-black opacity-0 peer-checked:opacity-100 pointer-events-none" />
         </div>
-        
-        <span className={cn("text-sm flex-1", config?.enabled ? "text-[var(--text)]" : "text-[var(--text-muted)]")}>
+
+        <span className={cn('text-sm flex-1 truncate', config?.enabled ? 'text-[var(--text)]' : 'text-[var(--text-muted)]')}>
           {modelName}
         </span>
 
-        <button 
+        <button
           onClick={() => setExpanded(!expanded)}
-          className="p-1 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors rounded"
+          className="p-1 text-[var(--text-muted)] hover:text-[var(--text)] transition-colors rounded shrink-0"
         >
-          {expanded ? <CaretDown size={14} /> : <CaretRight size={14} />}
+          {expanded ? <CaretDown size={13} /> : <CaretRight size={13} />}
         </button>
       </div>
 
       {expanded && (
-        <div className="pb-4 pl-9 pr-2 space-y-3">
-          <div className="grid grid-cols-2 gap-4">
+        <div className="pb-3 pl-11 pr-3 space-y-3">
+          <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--text-subtle)] font-bold mb-1.5">Max Tokens</label>
+              <label className="block text-[10px] uppercase tracking-wider text-[var(--text-subtle)] font-bold mb-1.5">
+                Context Window
+              </label>
               <input
                 type="number"
                 min={1}
-                max={200000}
-                value={maxTokens}
-                onChange={(e) => {
-                  setMaxTokens(Number(e.target.value));
-                  setIsDirty(true);
-                }}
+                max={2000000}
+                value={contextWindow}
+                onChange={(e) => { setContextWindow(Number(e.target.value)); setIsDirty(true); }}
                 className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1.5 text-xs text-[var(--text)] focus:border-white/30 transition-colors"
               />
+              <p className="text-[9px] text-[var(--text-subtle)] mt-1">Total tokens (input + output)</p>
             </div>
             <div>
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--text-subtle)] font-bold mb-1.5">Temperature</label>
+              <label className="block text-[10px] uppercase tracking-wider text-[var(--text-subtle)] font-bold mb-1.5">
+                Temperature
+              </label>
               <input
                 type="number"
                 min={0}
                 max={2}
                 step={0.1}
                 value={temperature}
-                onChange={(e) => {
-                  setTemperature(Number(e.target.value));
-                  setIsDirty(true);
-                }}
+                onChange={(e) => { setTemperature(Number(e.target.value)); setIsDirty(true); }}
                 className="w-full bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1.5 text-xs text-[var(--text)] focus:border-white/30 transition-colors"
               />
             </div>
@@ -172,9 +124,9 @@ const ModelRow: React.FC<ModelRowProps> = ({ modelName, config, onUpdate }) => {
             <div className="flex justify-end">
               <button
                 onClick={handleSave}
-                className="text-[10px] font-bold bg-white text-black px-2 py-1 rounded hover:bg-gray-200 transition-colors"
+                className="text-[10px] font-bold bg-white text-black px-2.5 py-1 rounded hover:bg-[#e5e5e5] transition-colors"
               >
-                Save Config
+                Save
               </button>
             </div>
           )}
@@ -184,129 +136,152 @@ const ModelRow: React.FC<ModelRowProps> = ({ modelName, config, onUpdate }) => {
   );
 };
 
-
 export const ProvidersTab: React.FC = () => {
-  const { providers, setProviders, addProvider, removeProvider } = useSettingsStore();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isAdding, setIsAdding] = useState(false);
+  const { providers, setProviders } = useSettingsStore();
 
-  const [form, setForm] = useState<ProviderFormData>(defaultForm);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
+  // Selected sidebar item — a providerType key, not a provider id
+  const [selectedType, setSelectedType] = useState<ProviderType>('enowxlabs');
+
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [modelConfigs, setModelConfigs] = useState<Record<string, ProviderModelConfig>>({});
   const [modelsLoading, setModelsLoading] = useState(false);
   const [modelsError, setModelsError] = useState<string | null>(null);
-  
+
   const [apiKeyEdit, setApiKeyEdit] = useState('');
+  const [apiKeyDirty, setApiKeyDirty] = useState(false);
   const [isSavingKey, setIsSavingKey] = useState(false);
-  
+
+  const [baseUrlEdit, setBaseUrlEdit] = useState('');
+  const [baseUrlDirty, setBaseUrlDirty] = useState(false);
+
   const [isEditingName, setIsEditingName] = useState(false);
   const [nameEdit, setNameEdit] = useState('');
 
-  const selectedProvider = providers.find(p => p.id === selectedId);
+  // The provider record for the currently selected type (may be null if not yet created)
+  const selectedProvider = providers.find(p => p.providerType === selectedType) ?? null;
 
-  useEffect(() => {
-    invoke<Provider[]>('list_providers')
-      .then(ps => {
-        setProviders(ps);
-        if (ps.length > 0 && !selectedId && !isAdding) {
-          setSelectedId(ps[0].id);
-        }
-      })
-      .catch(console.error);
+  const loadProviders = useCallback(async () => {
+    try {
+      const ps = await invoke<Provider[]>('list_providers');
+      setProviders(ps);
+    } catch (e) {
+      console.error('list_providers error:', e);
+    }
   }, [setProviders]);
 
   useEffect(() => {
-    if (!selectedProvider) return;
-    
+    loadProviders();
+  }, [loadProviders]);
+
+  // When selected type changes, reset all panel state
+  useEffect(() => {
     setAvailableModels([]);
     setModelConfigs({});
     setModelsError(null);
-    setApiKeyEdit(selectedProvider.apiKey || '');
-    setNameEdit(selectedProvider.name);
-    
-    const fetchModels = async () => {
+    setApiKeyDirty(false);
+    setBaseUrlDirty(false);
+    setIsEditingName(false);
+
+    const p = providers.find(pr => pr.providerType === selectedType) ?? null;
+    setApiKeyEdit(p?.apiKey ?? '');
+    setBaseUrlEdit(p?.baseUrl ?? PROVIDER_PRESETS[selectedType].baseUrl);
+    setNameEdit(p?.name ?? PROVIDER_PRESETS[selectedType].label);
+
+    if (!p) return;
+
+    const fetchAll = async () => {
       setModelsLoading(true);
       setModelsError(null);
       try {
-        const models = await invoke<string[]>('list_models', { providerId: selectedProvider.id });
+        const [models, configs] = await Promise.all([
+          invoke<string[]>('list_models', { providerId: p.id }),
+          invoke<ProviderModelConfig[]>('list_provider_models', { providerId: p.id }),
+        ]);
         setAvailableModels(models);
+        const map: Record<string, ProviderModelConfig> = {};
+        configs.forEach(c => { map[c.modelId] = c; });
+        setModelConfigs(map);
       } catch (e) {
-        console.error("Failed to list models", e);
-        setModelsError("Failed to load models. Check API key or connection.");
+        setModelsError('Failed to load models. Check API key or connection.');
       } finally {
         setModelsLoading(false);
       }
     };
+    fetchAll();
+  }, [selectedType, providers.find(p => p.providerType === selectedType)?.id]);
 
-    const fetchConfigs = async () => {
-      try {
-        const configs = await invoke<ProviderModelConfig[]>('list_provider_models', { providerId: selectedProvider.id });
-        const map: Record<string, ProviderModelConfig> = {};
-        configs.forEach(c => map[c.modelId] = c);
-        setModelConfigs(map);
-      } catch (e) {
-        console.error("Failed to load model configs", e);
-      }
-    };
-
-    fetchModels();
-    fetchConfigs();
-    
-  }, [selectedProvider?.id]);
-
-  const loadModels = async (providerId: string) => {
+  const refreshModels = async () => {
+    if (!selectedProvider) return;
     setModelsLoading(true);
     setModelsError(null);
     try {
-      const models = await invoke<string[]>('list_models', { providerId });
+      const models = await invoke<string[]>('list_models', { providerId: selectedProvider.id });
       setAvailableModels(models);
     } catch (e) {
-      console.error("Failed to list models", e);
-      setModelsError("Failed to load models. Check API key or connection.");
+      setModelsError('Failed to load models. Check API key or connection.');
     } finally {
       setModelsLoading(false);
     }
   };
 
-  const handleUpsertConfig = async (partial: Partial<ProviderModelConfig> & { modelId: string }) => {
-    if (!selectedProvider) return;
-    
-    const { modelId, enabled = false, maxTokens = 4096, temperature = 0.7 } = partial;
-    
+  // Ensure provider exists in DB (create if not), then run callback with it
+  const ensureProvider = async (): Promise<Provider | null> => {
+    if (selectedProvider) return selectedProvider;
+    const preset = PROVIDER_PRESETS[selectedType];
     try {
-      const updated = await invoke<ProviderModelConfig>('upsert_provider_model', {
-        providerId: selectedProvider.id,
-        modelId,
-        enabled,
-        maxTokens,
-        temperature
+      const created = await invoke<Provider>('create_provider', {
+        name: preset.label,
+        providerType: selectedType,
+        baseUrl: preset.baseUrl || baseUrlEdit,
+        apiKey: apiKeyEdit || null,
+        model: preset.model,
       });
-      
-      setModelConfigs(prev => ({
-        ...prev,
-        [modelId]: updated
-      }));
+      await loadProviders();
+      return created;
     } catch (e) {
-      console.error("Failed to save model config", e);
+      console.error('create_provider error:', e);
+      return null;
     }
   };
 
   const handleSaveApiKey = async () => {
-    if (!selectedProvider) return;
     setIsSavingKey(true);
     try {
+      let p = selectedProvider;
+      if (!p) {
+        p = await ensureProvider();
+        if (!p) return;
+      }
       await invoke('update_provider', {
-        ...selectedProvider,
-        apiKey: apiKeyEdit
+        id: p.id,
+        name: p.name,
+        baseUrl: p.baseUrl,
+        apiKey: apiKeyEdit || null,
+        model: p.model,
       });
-      const updatedList = await invoke<Provider[]>('list_providers');
-      setProviders(updatedList);
+      await loadProviders();
+      setApiKeyDirty(false);
     } catch (e) {
-      console.error("Failed to update API key", e);
+      console.error('update_provider (apiKey) error:', e);
     } finally {
       setIsSavingKey(false);
+    }
+  };
+
+  const handleSaveBaseUrl = async () => {
+    if (!selectedProvider) return;
+    try {
+      await invoke('update_provider', {
+        id: selectedProvider.id,
+        name: selectedProvider.name,
+        baseUrl: baseUrlEdit,
+        apiKey: selectedProvider.apiKey ?? null,
+        model: selectedProvider.model,
+      });
+      await loadProviders();
+      setBaseUrlDirty(false);
+    } catch (e) {
+      console.error('update_provider (baseUrl) error:', e);
     }
   };
 
@@ -314,327 +289,263 @@ export const ProvidersTab: React.FC = () => {
     if (!selectedProvider) return;
     try {
       await invoke('update_provider', {
-        ...selectedProvider,
-        name: nameEdit
+        id: selectedProvider.id,
+        name: nameEdit,
+        baseUrl: selectedProvider.baseUrl,
+        apiKey: selectedProvider.apiKey ?? null,
+        model: selectedProvider.model,
       });
-      const updatedList = await invoke<Provider[]>('list_providers');
-      setProviders(updatedList);
+      await loadProviders();
       setIsEditingName(false);
     } catch (e) {
-      console.error("Failed to update name", e);
+      console.error('update_provider (name) error:', e);
     }
   };
 
   const handleDeleteProvider = async () => {
     if (!selectedProvider || selectedProvider.isBuiltin) return;
-    if (!confirm(`Delete ${selectedProvider.name}?`)) return;
-    
     try {
       await invoke('delete_provider', { id: selectedProvider.id });
-      removeProvider(selectedProvider.id);
-      setSelectedId(null);
+      await loadProviders();
     } catch (e) {
-      console.error("Failed to delete provider", e);
+      console.error('delete_provider error:', e);
     }
   };
 
-  const handleAddSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
+  const handleUpsertConfig = async (
+    modelId: string,
+    patch: { enabled?: boolean; contextWindow?: number; temperature?: number },
+  ) => {
+    if (!selectedProvider) return;
+    const existing = modelConfigs[modelId];
+    const enabled = patch.enabled ?? existing?.enabled ?? false;
+    const maxTokens = patch.contextWindow ?? existing?.maxTokens ?? 4096;
+    const temperature = patch.temperature ?? existing?.temperature ?? 0.7;
     try {
-      const newProvider = await invoke<Provider>('create_provider', {
-        name: form.name,
-        providerType: form.providerType,
-        baseUrl: form.baseUrl,
-        apiKey: form.apiKey || null,
-        model: form.model,
+      const updated = await invoke<ProviderModelConfig>('upsert_provider_model', {
+        providerId: selectedProvider.id,
+        modelId,
+        enabled,
+        maxTokens,
+        temperature,
       });
-      addProvider(newProvider);
-      setIsAdding(false);
-      setSelectedId(newProvider.id);
-      setForm(defaultForm);
+      setModelConfigs(prev => ({ ...prev, [modelId]: updated }));
     } catch (e) {
-      console.error("Failed to create provider", e);
-    } finally {
-      setIsSubmitting(false);
+      console.error('upsert_provider_model error:', e);
     }
   };
 
-  const handlePreset = (key: ProviderType) => {
-    const p = PROVIDER_PRESETS[key];
-    setForm((prev) => ({
-      ...prev,
-      name: p.label,
-      providerType: p.providerType,
-      baseUrl: p.baseUrl,
-      model: p.model,
-    }));
+  const handleCheckAll = async (enable: boolean) => {
+    if (!selectedProvider) return;
+    await Promise.all(
+      availableModels.map(modelId => handleUpsertConfig(modelId, { enabled: enable }))
+    );
   };
+
+  const allEnabled = availableModels.length > 0 && availableModels.every(m => modelConfigs[m]?.enabled);
+  const someEnabled = availableModels.some(m => modelConfigs[m]?.enabled);
 
   return (
     <div className="flex h-full text-[var(--text)]">
-      <div className="w-56 shrink-0 border-r border-[var(--border)] flex flex-col h-full bg-[var(--surface-2)]/10">
+      {/* Sidebar */}
+      <div className="w-52 shrink-0 border-r border-[var(--border)] flex flex-col h-full bg-[var(--surface-2)]/10">
         <div className="flex-1 overflow-y-auto py-3 space-y-0.5">
-          {providers.map(p => (
-            <div
-              key={p.id}
-              onClick={() => {
-                setSelectedId(p.id);
-                setIsAdding(false);
-              }}
-              className={cn(
-                "cursor-pointer px-3 py-2.5 mx-2 rounded-lg flex items-center gap-2.5 transition-colors",
-                selectedId === p.id && !isAdding
-                  ? "bg-white/10 text-white shadow-sm"
-                  : "text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text)]"
-              )}
-            >
-              <ProviderIcon type={p.providerType} isBuiltin={p.isBuiltin} />
-              <div className="flex-1 min-w-0">
-                <div className="font-medium text-xs truncate">{p.name}</div>
-                <div className="text-[9px] uppercase tracking-wider text-[var(--text-subtle)] truncate">
-                  {p.providerType}
+          {SIDEBAR_ITEMS.map(type => {
+            const exists = providers.some(p => p.providerType === type);
+            const isBuiltin = providers.find(p => p.providerType === type)?.isBuiltin ?? false;
+            return (
+              <div
+                key={type}
+                onClick={() => setSelectedType(type)}
+                className={cn(
+                  'cursor-pointer px-3 py-2.5 mx-2 rounded-lg flex items-center gap-2.5 transition-colors',
+                  selectedType === type
+                    ? 'bg-white/10 text-white'
+                    : 'text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text)]'
+                )}
+              >
+                {isBuiltin ? (
+                  <Sparkle size={10} weight="fill" className="shrink-0 text-[var(--text-muted)]" />
+                ) : (
+                  <div className={cn('w-2 h-2 rounded-full shrink-0', exists ? 'bg-white/60' : 'bg-white/20')} />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="font-medium text-xs truncate">{PROVIDER_PRESETS[type].label}</div>
+                  <div className="text-[9px] uppercase tracking-wider text-[var(--text-subtle)] truncate">{type}</div>
                 </div>
+                {exists && (
+                  <div className="w-1.5 h-1.5 rounded-full bg-white/40 shrink-0" title="Configured" />
+                )}
               </div>
-            </div>
-          ))}
-        </div>
-        
-        <div className="p-2 border-t border-[var(--border)]">
-          <button
-            onClick={() => {
-              setIsAdding(true);
-              setSelectedId(null);
-            }}
-            className={cn(
-              "w-full text-xs flex items-center justify-center gap-2 px-3 py-2 rounded-lg border transition-all",
-              isAdding 
-                ? "bg-white text-black border-transparent font-semibold"
-                : "text-[var(--text-muted)] border-[var(--border)] hover:text-[var(--text)] hover:border-[var(--text-muted)]"
-            )}
-          >
-            <Plus size={12} weight="bold" />
-            Add Provider
-          </button>
+            );
+          })}
         </div>
       </div>
 
+      {/* Content panel */}
       <div className="flex-1 flex flex-col h-full bg-[var(--surface)] overflow-hidden">
-        {isAdding ? (
-          <div className="flex-1 overflow-y-auto p-8">
-            <div className="max-w-md mx-auto space-y-6">
-              <div>
-                <h2 className="text-lg font-bold">Add New Provider</h2>
-                <p className="text-xs text-[var(--text-muted)] mt-1">Configure a new LLM provider connection.</p>
-              </div>
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
 
-              <div className="flex gap-2 flex-wrap">
-                {(Object.keys(PROVIDER_PRESETS) as ProviderType[]).map((key) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handlePreset(key)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-md text-[11px] font-semibold border transition-colors',
-                      form.providerType === key
-                        ? 'border-white/40 text-white bg-white/5'
-                        : 'border-[var(--border)] text-[var(--text-muted)] hover:border-[var(--border-strong)] hover:text-[var(--text)]'
-                    )}
-                  >
-                    {PROVIDER_PRESETS[key].label}
-                  </button>
-                ))}
-              </div>
-
-              <form onSubmit={handleAddSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">Name</label>
-                  <input
-                    required
-                    value={form.name}
-                    onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors"
-                  />
-                </div>
-
-                {!FIXED_BASE_URL[form.providerType] && (
-                  <div>
-                    <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">Base URL</label>
+          {/* Header */}
+          <div className="flex items-start justify-between pb-5 border-b border-[var(--border)]">
+            <div>
+              <div className="flex items-center gap-3">
+                {isEditingName && selectedProvider ? (
+                  <div className="flex items-center gap-2">
                     <input
-                      required
-                      value={form.baseUrl}
-                      onChange={(e) => setForm(f => ({ ...f, baseUrl: e.target.value }))}
-                      className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors"
+                      value={nameEdit}
+                      onChange={(e) => setNameEdit(e.target.value)}
+                      className="bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-base font-bold w-48 focus:border-white/40"
+                      autoFocus
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleSaveName(); if (e.key === 'Escape') setIsEditingName(false); }}
                     />
+                    <button onClick={handleSaveName} className="p-1 text-[var(--text-muted)] hover:text-white"><Check size={15} /></button>
+                    <button onClick={() => setIsEditingName(false)} className="p-1 text-[var(--text-muted)] hover:text-white"><X size={15} /></button>
                   </div>
-                )}
-
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">API Key</label>
-                  <input
-                    type="password"
-                    value={form.apiKey}
-                    onChange={(e) => setForm(f => ({ ...f, apiKey: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">Default Model ID</label>
-                  <input
-                    required
-                    value={form.model}
-                    onChange={(e) => setForm(f => ({ ...f, model: e.target.value }))}
-                    className="w-full px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors"
-                  />
-                </div>
-
-                <div className="pt-4 flex justify-end gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setIsAdding(false)}
-                    className="px-4 py-2 rounded-lg text-xs font-semibold hover:bg-white/5 transition-colors"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="px-4 py-2 rounded-lg bg-white text-black text-xs font-bold hover:bg-gray-200 transition-colors disabled:opacity-50"
-                  >
-                    {isSubmitting ? 'Creating...' : 'Create Provider'}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        ) : selectedProvider ? (
-          <div className="flex-1 overflow-y-auto p-6 space-y-8">
-            
-            <div className="flex items-start justify-between pb-6 border-b border-[var(--border)]">
-              <div>
-                <div className="flex items-center gap-3">
-                  {isEditingName ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        value={nameEdit}
-                        onChange={(e) => setNameEdit(e.target.value)}
-                        className="bg-[var(--surface-2)] border border-[var(--border)] rounded px-2 py-1 text-base font-bold w-48 focus:border-white/40"
-                        autoFocus
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-                      />
-                      <button onClick={handleSaveName} className="p-1 hover:text-white text-green-500"><Check size={16} /></button>
-                      <button onClick={() => setIsEditingName(false)} className="p-1 hover:text-white text-red-500"><X size={16} /></button>
-                    </div>
-                  ) : (
-                    <h1 className="text-xl font-bold flex items-center gap-2">
-                      {selectedProvider.name}
-                      {!selectedProvider.isBuiltin && (
-                        <button 
-                          onClick={() => setIsEditingName(true)} 
-                          className="text-[var(--text-muted)] hover:text-white transition-colors"
-                        >
-                          <PencilSimple size={14} />
-                        </button>
-                      )}
-                    </h1>
-                  )}
-                </div>
-                <div className="flex items-center gap-2 mt-1.5">
-                  <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-subtle)] bg-[var(--surface-2)] px-1.5 py-0.5 rounded">
-                    {selectedProvider.providerType}
-                  </span>
-                  {selectedProvider.isBuiltin && (
-                    <span className="text-[10px] uppercase tracking-wider font-semibold text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded flex items-center gap-1">
-                      <Sparkle size={10} weight="fill" /> Built-in
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {!selectedProvider.isBuiltin && (
-                <button
-                  onClick={handleDeleteProvider}
-                  className="p-2 rounded-lg text-red-400 hover:bg-red-500/10 hover:text-red-300 transition-colors"
-                  title="Delete Provider"
-                >
-                  <Trash size={18} />
-                </button>
-              )}
-            </div>
-
-            <div className="space-y-3">
-              <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Configuration</label>
-              <div className="bg-[var(--surface-2)]/30 rounded-xl p-4 border border-[var(--border)]">
-                <div className="mb-3">
-                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">API Key</label>
-                  <div className="flex gap-2">
-                    <input
-                      type="password"
-                      value={apiKeyEdit}
-                      onChange={(e) => setApiKeyEdit(e.target.value)}
-                      placeholder={selectedProvider.isBuiltin ? "Managed automatically" : "sk-..."}
-                      disabled={selectedProvider.isBuiltin}
-                      className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                    {!selectedProvider.isBuiltin && apiKeyEdit !== selectedProvider.apiKey && (
-                      <button
-                        onClick={handleSaveApiKey}
-                        disabled={isSavingKey}
-                        className="px-3 py-2 rounded-lg bg-white text-black text-xs font-bold hover:bg-gray-200 transition-colors"
-                      >
-                        {isSavingKey ? 'Saving...' : 'Save'}
+                ) : (
+                  <h1 className="text-lg font-bold flex items-center gap-2">
+                    {selectedProvider?.name ?? PROVIDER_PRESETS[selectedType].label}
+                    {selectedProvider && !selectedProvider.isBuiltin && (
+                      <button onClick={() => setIsEditingName(true)} className="text-[var(--text-muted)] hover:text-white transition-colors">
+                        <PencilSimple size={13} />
                       </button>
                     )}
-                  </div>
-                  {selectedProvider.providerType === 'enowxlabs' && (
-                    <p className="text-[10px] text-[var(--text-muted)] mt-1.5">
-                      Get your API key at <a href="https://api.enowxlabs.com" target="_blank" rel="noreferrer" className="text-blue-400 hover:underline">api.enowxlabs.com</a>
-                    </p>
-                  )}
-                </div>
+                  </h1>
+                )}
+              </div>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-subtle)] bg-[var(--surface-2)] px-1.5 py-0.5 rounded">
+                  {selectedType}
+                </span>
+                {selectedProvider?.isBuiltin && (
+                  <span className="text-[10px] uppercase tracking-wider font-semibold text-[var(--text-muted)] bg-white/5 px-1.5 py-0.5 rounded flex items-center gap-1">
+                    <Sparkle size={9} weight="fill" /> Built-in
+                  </span>
+                )}
+                {!selectedProvider && (
+                  <span className="text-[10px] text-[var(--text-subtle)]">Not configured</span>
+                )}
               </div>
             </div>
 
-            <div className="space-y-3 pb-8">
+            {selectedProvider && !selectedProvider.isBuiltin && (
+              <button
+                onClick={handleDeleteProvider}
+                className="p-2 rounded-lg text-[var(--text-muted)] hover:text-white hover:bg-white/5 transition-colors"
+                title="Remove provider"
+              >
+                <Trash size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Configuration */}
+          <div className="space-y-4">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Configuration</p>
+
+            {/* Base URL — only for ollama/custom */}
+            {!FIXED_BASE_URL[selectedType] && (
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">Base URL</label>
+                <div className="flex gap-2">
+                  <input
+                    value={baseUrlEdit}
+                    onChange={(e) => { setBaseUrlEdit(e.target.value); setBaseUrlDirty(true); }}
+                    placeholder="http://localhost:11434/v1"
+                    className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors"
+                  />
+                  {baseUrlDirty && selectedProvider && (
+                    <button
+                      onClick={handleSaveBaseUrl}
+                      className="px-3 py-2 rounded-lg bg-white text-black text-xs font-bold hover:bg-[#e5e5e5] transition-colors"
+                    >
+                      Save
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* API Key */}
+            <div>
+              <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">API Key</label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  value={apiKeyEdit}
+                  onChange={(e) => { setApiKeyEdit(e.target.value); setApiKeyDirty(true); }}
+                  placeholder={selectedType === 'ollama' ? 'Not required for local Ollama' : 'sk-...'}
+                  className="flex-1 px-3 py-2 rounded-lg bg-[var(--surface-2)] border border-[var(--border)] text-sm focus:border-white/40 transition-colors"
+                />
+                {apiKeyDirty && (
+                  <button
+                    onClick={handleSaveApiKey}
+                    disabled={isSavingKey}
+                    className="px-3 py-2 rounded-lg bg-white text-black text-xs font-bold hover:bg-[#e5e5e5] transition-colors disabled:opacity-50"
+                  >
+                    {isSavingKey ? 'Saving…' : 'Save'}
+                  </button>
+                )}
+              </div>
+              {selectedType === 'enowxlabs' && (
+                <p className="text-[10px] text-[var(--text-muted)] mt-1.5">
+                  Get your API key at{' '}
+                  <a href="https://api.enowxlabs.com" target="_blank" rel="noreferrer" className="underline hover:text-white">
+                    api.enowxlabs.com
+                  </a>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Available Models — only shown when provider is configured */}
+          {selectedProvider && (
+            <div className="space-y-3 pb-4">
               <div className="flex items-center justify-between">
-                <label className="text-xs font-bold uppercase tracking-wider text-[var(--text-muted)]">Available Models</label>
-                <button
-                  onClick={() => loadModels(selectedProvider.id)}
-                  disabled={modelsLoading}
-                  className="text-[10px] flex items-center gap-1.5 text-[var(--text-muted)] hover:text-white transition-colors"
-                >
-                  <ArrowsClockwise size={12} className={modelsLoading ? "animate-spin" : ""} />
-                  Refresh List
-                </button>
+                <p className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-muted)]">Available Models</p>
+                <div className="flex items-center gap-3">
+                  {availableModels.length > 0 && !modelsLoading && (
+                    <button
+                      onClick={() => handleCheckAll(!allEnabled)}
+                      className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-white transition-colors"
+                    >
+                      {allEnabled ? <CheckSquare size={13} weight="fill" /> : someEnabled ? <CheckSquare size={13} /> : <Square size={13} />}
+                      {allEnabled ? 'Uncheck all' : 'Check all'}
+                    </button>
+                  )}
+                  <button
+                    onClick={refreshModels}
+                    disabled={modelsLoading}
+                    className="flex items-center gap-1.5 text-[10px] text-[var(--text-muted)] hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    <ArrowsClockwise size={12} className={modelsLoading ? 'animate-spin' : ''} />
+                    Refresh
+                  </button>
+                </div>
               </div>
 
               <div className="border border-[var(--border)] rounded-xl overflow-hidden bg-[var(--surface-2)]/20">
                 {modelsLoading ? (
                   <div className="p-8 text-center text-[var(--text-muted)] text-sm">
-                    <ArrowsClockwise size={24} className="animate-spin mx-auto mb-2" />
-                    Fetching models...
+                    <ArrowsClockwise size={22} className="animate-spin mx-auto mb-2" />
+                    Fetching models…
                   </div>
                 ) : modelsError ? (
-                  <div className="p-8 text-center">
-                    <p className="text-red-400 text-sm mb-2">{modelsError}</p>
-                    <button 
-                      onClick={() => loadModels(selectedProvider.id)}
-                      className="text-xs underline text-[var(--text-muted)] hover:text-white"
-                    >
-                      Try Again
+                  <div className="p-8 text-center space-y-2">
+                    <p className="text-sm text-[var(--text-muted)]">{modelsError}</p>
+                    <button onClick={refreshModels} className="text-xs underline text-[var(--text-muted)] hover:text-white">
+                      Try again
                     </button>
                   </div>
                 ) : availableModels.length === 0 ? (
                   <div className="p-8 text-center text-[var(--text-muted)] text-xs">
-                    No models found. Check your API key.
+                    No models found. Check your API key and try refreshing.
                   </div>
                 ) : (
-                  <div className="divide-y divide-[var(--border)]">
+                  <div>
                     {availableModels.map(modelName => (
                       <ModelRow
                         key={modelName}
-                        providerId={selectedProvider.id}
                         modelName={modelName}
                         config={modelConfigs[modelName]}
                         onUpdate={handleUpsertConfig}
@@ -644,19 +555,17 @@ export const ProvidersTab: React.FC = () => {
                 )}
               </div>
             </div>
+          )}
 
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-[var(--text-muted)] p-8 text-center">
-            <div className="w-16 h-16 rounded-2xl bg-[var(--surface-2)] flex items-center justify-center mb-4">
-              <Robot size={32} weight="duotone" className="opacity-50" />
+          {/* Prompt to save API key first if provider not yet created */}
+          {!selectedProvider && (
+            <div className="rounded-xl border border-dashed border-[var(--border)] p-6 text-center space-y-1">
+              <p className="text-xs text-[var(--text-muted)]">Enter your API key above and click Save to configure this provider.</p>
+              <p className="text-[10px] text-[var(--text-subtle)]">Available models will appear once configured.</p>
             </div>
-            <h3 className="text-sm font-semibold text-[var(--text)] mb-1">Select a Provider</h3>
-            <p className="text-xs max-w-[200px]">
-              Choose a provider from the sidebar to configure settings and models.
-            </p>
-          </div>
-        )}
+          )}
+
+        </div>
       </div>
     </div>
   );
