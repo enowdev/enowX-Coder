@@ -21,7 +21,17 @@ export const StreamingMessage: React.FC = () => {
             <span className="inline-block w-0.5 h-4 bg-white/70 ml-0.5 align-middle animate-pulse" />
           </>
         ) : (
-          <span className="text-[var(--text-subtle)] animate-pulse">Generating...</span>
+          <span className="text-[var(--text-subtle)]" aria-label="Generating">
+            {'Generating...'.split('').map((char, i) => (
+              <span
+                key={i}
+                className="wave-letter"
+                style={{ animationDelay: `${i * 0.07}s` }}
+              >
+                {char === ' ' ? '\u00A0' : char}
+              </span>
+            ))}
+          </span>
         )}
       </div>
     </div>

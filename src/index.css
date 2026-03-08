@@ -65,3 +65,13 @@ body {
   outline: 1px solid rgba(255,255,255,0.25);
   outline-offset: 2px;
 }
+
+@keyframes wave {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.wave-letter {
+  display: inline-block;
+  animation: wave 1s ease-in-out infinite;
+}
