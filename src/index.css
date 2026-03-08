@@ -66,12 +66,12 @@ body {
   outline-offset: 2px;
 }
 
-@keyframes wave {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-6px); }
+@keyframes letter-fade {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 1; }
 }
 
 .wave-letter {
   display: inline-block;
-  animation: wave 1.2s ease-in-out infinite;
+  animation: letter-fade 1.4s ease-in-out infinite;
 }
