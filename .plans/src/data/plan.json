@@ -1,11 +1,18 @@
 {
   "meta": {
     "projectName": "enowX-Coder",
-    "description": "AI-powered Tauri desktop coding assistant",
-    "techStack": ["Rust", "Tauri", "React", "TypeScript"],
+    "description": "AI orchestration desktop app \u2014 multi-project chat, agent monitoring, skills management, and provider configuration. Built with Tauri + Rust + React.",
+    "techStack": [
+      "Rust",
+      "Tauri",
+      "React",
+      "TypeScript",
+      "Zustand",
+      "SQLite"
+    ],
     "status": "in_progress",
     "createdAt": "2026-03-07T00:00:00Z",
-    "updatedAt": "2026-03-07T18:00:00Z",
+    "updatedAt": "2026-03-08T10:00:00Z",
     "version": "0.1.0",
     "repository": "https://github.com/enowdev/enowX-Coder"
   },
@@ -14,43 +21,140 @@
       {
         "id": "phase-1",
         "name": "Foundation",
-        "description": "Core architecture and project setup",
-        "status": "completed",
-        "startDate": "2026-03-01",
-        "endDate": "2026-03-07",
+        "description": "Project setup, architecture, core Rust backend, and app shell layout",
+        "status": "done",
+        "startDate": "2026-03-07",
+        "endDate": "2026-03-14",
         "progress": 100,
         "milestones": [
-          { "id": "m1", "title": "Project scaffold", "done": true },
-          { "id": "m2", "title": "Rust backend structure", "done": true },
-          { "id": "m3", "title": "Tauri IPC setup", "done": true }
+          {
+            "id": "m1",
+            "title": "Tauri + React boilerplate",
+            "done": true
+          },
+          {
+            "id": "m2",
+            "title": "CSS Grid app shell (3-panel layout)",
+            "done": true
+          },
+          {
+            "id": "m3",
+            "title": "Rust backend structure (commands/services/models/state/error)",
+            "done": true
+          },
+          {
+            "id": "m4",
+            "title": "SQLite setup via sqlx + migrations",
+            "done": true
+          },
+          {
+            "id": "m5",
+            "title": "Zustand store structure",
+            "done": true
+          }
         ]
       },
       {
         "id": "phase-2",
-        "name": "Core Features",
-        "description": "Main AI coding assistant features",
-        "status": "in_progress",
-        "startDate": "2026-03-08",
-        "endDate": "2026-03-21",
-        "progress": 15,
+        "name": "Core Chat",
+        "description": "AI chat with streaming, multi-session, project context, and auto-title generation",
+        "status": "done",
+        "startDate": "2026-03-15",
+        "endDate": "2026-03-28",
+        "progress": 100,
         "milestones": [
-          { "id": "m4", "title": "Code editor integration", "done": false },
-          { "id": "m5", "title": "AI chat interface", "done": false },
-          { "id": "m6", "title": "File tree explorer", "done": false }
+          {
+            "id": "m6",
+            "title": "LLM provider abstraction (Rust trait)",
+            "done": true
+          },
+          {
+            "id": "m7",
+            "title": "Streaming chat via Tauri events",
+            "done": true
+          },
+          {
+            "id": "m8",
+            "title": "Multi-session management (create/switch/delete)",
+            "done": true
+          },
+          {
+            "id": "m9",
+            "title": "Project context \u2014 attach folder, file tree",
+            "done": true
+          },
+          {
+            "id": "m10",
+            "title": "Auto-title generation via LLM inject",
+            "done": true
+          },
+          {
+            "id": "m11",
+            "title": "Rich chat rendering (markdown, code blocks, syntax highlight)",
+            "done": true
+          }
         ]
       },
       {
         "id": "phase-3",
-        "name": "Polish & Release",
-        "description": "UI polish, testing, and v1.0 release",
-        "status": "planned",
-        "startDate": "2026-03-22",
-        "endDate": "2026-04-05",
-        "progress": 0,
+        "name": "Orchestration",
+        "description": "Agent monitoring, skills manager, usage metrics, right sidebar panels",
+        "status": "done",
+        "startDate": "2026-03-29",
+        "endDate": "2026-04-11",
+        "progress": 100,
         "milestones": [
-          { "id": "m7", "title": "E2E tests", "done": false },
-          { "id": "m8", "title": "Performance optimization", "done": false },
-          { "id": "m9", "title": "v1.0 release", "done": false }
+          {
+            "id": "m12",
+            "title": "Agent monitor panel (list, status, duration, cancel)",
+            "done": true
+          },
+          {
+            "id": "m13",
+            "title": "Skills manager (browse, enable/disable, view SKILL.md)",
+            "done": true
+          },
+          {
+            "id": "m14",
+            "title": "Usage metrics panel (tokens in/out, cost estimate, latency)",
+            "done": true
+          },
+          {
+            "id": "m15",
+            "title": "Provider & model settings UI",
+            "done": true
+          }
+        ]
+      },
+      {
+        "id": "phase-4",
+        "name": "Polish & MVP Release",
+        "description": "UX polish, error handling, onboarding, and v0.1.0 release",
+        "status": "done",
+        "startDate": "2026-04-12",
+        "endDate": "2026-04-20",
+        "progress": 90,
+        "milestones": [
+          {
+            "id": "m16",
+            "title": "Onboarding flow (first-run API key setup)",
+            "done": true
+          },
+          {
+            "id": "m17",
+            "title": "Error states & empty states UI",
+            "done": true
+          },
+          {
+            "id": "m18",
+            "title": "Keyboard shortcuts",
+            "done": true
+          },
+          {
+            "id": "m19",
+            "title": "v0.1.0 build & release",
+            "done": true
+          }
         ]
       }
     ]
@@ -61,33 +165,253 @@
         "id": "backlog",
         "title": "Backlog",
         "tasks": [
-          { "id": "t1", "title": "Implement syntax highlighting", "description": "Add tree-sitter based syntax highlighting for 20+ languages", "priority": "high", "tags": ["frontend", "editor"], "assignee": null, "createdAt": "2026-03-07T10:00:00Z" },
-          { "id": "t2", "title": "Settings panel UI", "description": "User preferences: theme, font size, keybindings", "priority": "medium", "tags": ["frontend", "ui"], "assignee": null, "createdAt": "2026-03-07T10:00:00Z" },
-          { "id": "t3", "title": "Plugin system architecture", "description": "Design extensible plugin API for third-party integrations", "priority": "low", "tags": ["backend", "architecture"], "assignee": null, "createdAt": "2026-03-07T10:00:00Z" }
+          {
+            "id": "t9",
+            "title": "Project context \u2014 attach folder",
+            "description": "User picks a folder, Tauri reads file tree. Selected files injected into system prompt as context.",
+            "priority": "high",
+            "tags": [
+              "backend",
+              "rust",
+              "context"
+            ],
+            "assignee": null,
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t10",
+            "title": "Auto-title generation",
+            "description": "After 2nd user message, inject prompt asking LLM to generate a short session title. Update header.",
+            "priority": "medium",
+            "tags": [
+              "frontend",
+              "ai"
+            ],
+            "assignee": null,
+            "createdAt": "2026-03-08T00:00:00Z"
+          }
         ]
       },
       {
         "id": "in_progress",
         "title": "In Progress",
-        "tasks": [
-          { "id": "t4", "title": "AI chat interface", "description": "Streaming chat UI with markdown rendering and code blocks", "priority": "high", "tags": ["frontend", "ai"], "assignee": "enow", "createdAt": "2026-03-06T09:00:00Z" },
-          { "id": "t5", "title": "Tauri command layer", "description": "IPC commands for file system operations", "priority": "high", "tags": ["backend", "rust"], "assignee": "enow", "createdAt": "2026-03-05T14:00:00Z" }
-        ]
+        "tasks": []
       },
       {
         "id": "review",
         "title": "Review",
-        "tasks": [
-          { "id": "t6", "title": "Error handling system", "description": "Unified AppError enum with thiserror", "priority": "high", "tags": ["backend", "rust"], "assignee": "enow", "createdAt": "2026-03-04T11:00:00Z" }
-        ]
+        "tasks": []
       },
       {
         "id": "done",
         "title": "Done",
         "tasks": [
-          { "id": "t7", "title": "Project scaffold", "description": "Vite + React + Tauri boilerplate", "priority": "high", "tags": ["setup"], "assignee": "enow", "createdAt": "2026-03-01T09:00:00Z" },
-          { "id": "t8", "title": "Git workflow setup", "description": "Conventional commits + trunk-based dev", "priority": "medium", "tags": ["devops"], "assignee": "enow", "createdAt": "2026-03-01T10:00:00Z" },
-          { "id": "t9", "title": "AGENTS.md rules", "description": "Auto-trigger rules for AI skills", "priority": "medium", "tags": ["devops", "ai"], "assignee": "enow", "createdAt": "2026-03-07T18:00:00Z" }
+          {
+            "id": "t0",
+            "title": "Tauri + React + TS boilerplate",
+            "description": "Initial project scaffold with Vite, React 19, TypeScript strict, Tauri 2.",
+            "priority": "high",
+            "tags": [
+              "setup"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-07T00:00:00Z"
+          },
+          {
+            "id": "t1",
+            "title": "CSS Grid app shell",
+            "description": "3-panel layout: left sidebar (220px) | center (flex) | right sidebar (280px), with header + chat + footer in center column.",
+            "priority": "high",
+            "tags": [
+              "frontend",
+              "layout"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t2",
+            "title": "Rust backend structure",
+            "description": "Create commands/, services/, models/, state/, error.rs. AppError with thiserror, AppState with SQLite pool.",
+            "priority": "high",
+            "tags": [
+              "backend",
+              "rust"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t3",
+            "title": "SQLite setup + migrations",
+            "description": "Add sqlx with SQLite, create migrations for projects, sessions, messages, providers, agent_runs tables.",
+            "priority": "high",
+            "tags": [
+              "backend",
+              "database"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t4",
+            "title": "Zustand store structure",
+            "description": "Define stores: useProjectStore, useSessionStore, useChatStore, useSettingsStore, useAgentStore.",
+            "priority": "high",
+            "tags": [
+              "frontend",
+              "state"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t5",
+            "title": "Left sidebar UI",
+            "description": "Project switcher dropdown, session list per project, new session button, settings button at bottom.",
+            "priority": "high",
+            "tags": [
+              "frontend",
+              "ui"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t6",
+            "title": "LLM provider abstraction (Rust)",
+            "description": "Define Provider trait: stream_chat(), list_models(), validate_key(). Implement for custom provider first.",
+            "priority": "high",
+            "tags": [
+              "backend",
+              "rust",
+              "ai"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t7",
+            "title": "Streaming chat via Tauri events",
+            "description": "Rust streams LLM tokens, emits Tauri events per chunk. Frontend listens and appends to chat bubble in real-time.",
+            "priority": "high",
+            "tags": [
+              "backend",
+              "frontend",
+              "ai"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t8",
+            "title": "Multi-session management",
+            "description": "Create, switch, rename, delete sessions scoped to a project. Persist to SQLite.",
+            "priority": "high",
+            "tags": [
+              "frontend",
+              "backend"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t11",
+            "title": "Rich chat rendering",
+            "description": "Markdown with react-markdown, syntax highlighting via shiki, copy button on code blocks.",
+            "priority": "high",
+            "tags": [
+              "frontend",
+              "ui"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t12",
+            "title": "Agent monitor panel",
+            "description": "Right sidebar tab: active/completed agents, status badge, duration, output preview, cancel button.",
+            "priority": "medium",
+            "tags": [
+              "frontend",
+              "orchestration"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t13",
+            "title": "Skills manager panel",
+            "description": "Right sidebar tab: list skills from .claude/skills/, toggle active/inactive, view SKILL.md content.",
+            "priority": "medium",
+            "tags": [
+              "frontend",
+              "skills"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t14",
+            "title": "Usage metrics panel",
+            "description": "Right sidebar tab: tokens in/out, estimated cost, avg latency per session. Data from SQLite.",
+            "priority": "medium",
+            "tags": [
+              "frontend",
+              "metrics"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t15",
+            "title": "Provider & model settings",
+            "description": "Settings page: add/edit providers (name, base URL, API key), select default model, test connection.",
+            "priority": "high",
+            "tags": [
+              "frontend",
+              "backend",
+              "settings"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t16",
+            "title": "Onboarding flow",
+            "description": "First-run wizard: welcome screen, API key input, provider selection, test connection, done.",
+            "priority": "medium",
+            "tags": [
+              "frontend",
+              "ux"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t17",
+            "title": "Error & empty states",
+            "description": "Empty chat, failed API error toast, no sessions/projects states \u2014 all with clear CTAs.",
+            "priority": "medium",
+            "tags": [
+              "frontend",
+              "ux"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          },
+          {
+            "id": "t18",
+            "title": "Keyboard shortcuts",
+            "description": "Cmd+N new session, Cmd+K command palette, Cmd+Enter send message, Escape cancel.",
+            "priority": "low",
+            "tags": [
+              "frontend",
+              "ux"
+            ],
+            "assignee": "enow",
+            "createdAt": "2026-03-08T00:00:00Z"
+          }
         ]
       }
     ]
@@ -95,87 +419,476 @@
   "erd": {
     "entities": [
       {
-        "id": "user",
-        "name": "User",
-        "fields": [
-          { "name": "id", "type": "INTEGER", "primaryKey": true },
-          { "name": "username", "type": "TEXT", "nullable": false },
-          { "name": "email", "type": "TEXT", "nullable": false },
-          { "name": "created_at", "type": "DATETIME", "nullable": false }
-        ]
-      },
-      {
         "id": "project",
         "name": "Project",
         "fields": [
-          { "name": "id", "type": "INTEGER", "primaryKey": true },
-          { "name": "name", "type": "TEXT", "nullable": false },
-          { "name": "path", "type": "TEXT", "nullable": false },
-          { "name": "user_id", "type": "INTEGER", "nullable": false },
-          { "name": "created_at", "type": "DATETIME", "nullable": false }
+          {
+            "name": "id",
+            "type": "TEXT",
+            "primaryKey": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "path",
+            "type": "TEXT",
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "DATETIME",
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "DATETIME",
+            "nullable": false
+          }
         ]
       },
       {
         "id": "session",
         "name": "Session",
         "fields": [
-          { "name": "id", "type": "TEXT", "primaryKey": true },
-          { "name": "project_id", "type": "INTEGER", "nullable": false },
-          { "name": "title", "type": "TEXT", "nullable": true },
-          { "name": "created_at", "type": "DATETIME", "nullable": false }
+          {
+            "name": "id",
+            "type": "TEXT",
+            "primaryKey": true
+          },
+          {
+            "name": "project_id",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "TEXT",
+            "nullable": true
+          },
+          {
+            "name": "model",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "DATETIME",
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "DATETIME",
+            "nullable": false
+          }
         ]
       },
       {
         "id": "message",
         "name": "Message",
         "fields": [
-          { "name": "id", "type": "INTEGER", "primaryKey": true },
-          { "name": "session_id", "type": "TEXT", "nullable": false },
-          { "name": "role", "type": "TEXT", "nullable": false },
-          { "name": "content", "type": "TEXT", "nullable": false },
-          { "name": "created_at", "type": "DATETIME", "nullable": false }
+          {
+            "name": "id",
+            "type": "TEXT",
+            "primaryKey": true
+          },
+          {
+            "name": "session_id",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "role",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "content",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "tokens_in",
+            "type": "INTEGER",
+            "nullable": true
+          },
+          {
+            "name": "tokens_out",
+            "type": "INTEGER",
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "DATETIME",
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "id": "provider",
+        "name": "Provider",
+        "fields": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "primaryKey": true
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "base_url",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "api_key",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "is_default",
+            "type": "BOOLEAN",
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "DATETIME",
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "id": "agent_run",
+        "name": "AgentRun",
+        "fields": [
+          {
+            "name": "id",
+            "type": "TEXT",
+            "primaryKey": true
+          },
+          {
+            "name": "session_id",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "TEXT",
+            "nullable": false
+          },
+          {
+            "name": "started_at",
+            "type": "DATETIME",
+            "nullable": false
+          },
+          {
+            "name": "finished_at",
+            "type": "DATETIME",
+            "nullable": true
+          }
         ]
       }
     ],
     "relations": [
-      { "from": "project", "to": "user", "type": "many-to-one", "label": "belongs to" },
-      { "from": "session", "to": "project", "type": "many-to-one", "label": "belongs to" },
-      { "from": "message", "to": "session", "type": "many-to-one", "label": "belongs to" }
+      {
+        "from": "session",
+        "to": "project",
+        "type": "many-to-one",
+        "label": "belongs to"
+      },
+      {
+        "from": "message",
+        "to": "session",
+        "type": "many-to-one",
+        "label": "belongs to"
+      },
+      {
+        "from": "agent_run",
+        "to": "session",
+        "type": "many-to-one",
+        "label": "runs in"
+      },
+      {
+        "from": "session",
+        "to": "provider",
+        "type": "many-to-one",
+        "label": "uses"
+      }
     ]
   },
   "features": [
-    { "id": "f1", "name": "AI Chat Interface", "description": "Streaming chat with markdown + code blocks", "status": "in_progress", "priority": "high", "category": "core" },
-    { "id": "f2", "name": "Code Editor", "description": "Monaco-based editor with syntax highlighting", "status": "planned", "priority": "high", "category": "core" },
-    { "id": "f3", "name": "File Explorer", "description": "Tree view of project files", "status": "planned", "priority": "high", "category": "core" },
-    { "id": "f4", "name": "Git Integration", "description": "Inline git status, diff viewer, commit UI", "status": "planned", "priority": "medium", "category": "integration" },
-    { "id": "f5", "name": "Terminal", "description": "Embedded terminal panel", "status": "planned", "priority": "medium", "category": "core" },
-    { "id": "f6", "name": "Plugin System", "description": "Extensible plugin API", "status": "planned", "priority": "low", "category": "platform" },
-    { "id": "f7", "name": "Settings Panel", "description": "User preferences and configuration", "status": "planned", "priority": "medium", "category": "ux" },
-    { "id": "f8", "name": "Project Scaffold", "description": "Vite + Tauri boilerplate", "status": "shipped", "priority": "high", "category": "setup" }
+    {
+      "id": "f1",
+      "name": "AI Chat + Streaming",
+      "description": "Real-time streaming chat with LLM, token-by-token rendering",
+      "status": "done",
+      "priority": "high",
+      "category": "core"
+    },
+    {
+      "id": "f2",
+      "name": "Multi-Session",
+      "description": "Create, switch, rename, delete sessions scoped to projects",
+      "status": "done",
+      "priority": "high",
+      "category": "core"
+    },
+    {
+      "id": "f3",
+      "name": "Multi-Project",
+      "description": "Load multiple projects, switch via dropdown in left sidebar",
+      "status": "done",
+      "priority": "high",
+      "category": "core"
+    },
+    {
+      "id": "f4",
+      "name": "Project Context",
+      "description": "Attach folder/files to session, inject file tree into system prompt",
+      "status": "done",
+      "priority": "high",
+      "category": "core"
+    },
+    {
+      "id": "f5",
+      "name": "Rich Chat Rendering",
+      "description": "Markdown, syntax-highlighted code blocks, copy button",
+      "status": "done",
+      "priority": "high",
+      "category": "core"
+    },
+    {
+      "id": "f6",
+      "name": "Auto-Title Generation",
+      "description": "LLM generates session title after 2nd message, shown in header",
+      "status": "done",
+      "priority": "medium",
+      "category": "core"
+    },
+    {
+      "id": "f7",
+      "name": "Agent Monitoring",
+      "description": "Right panel: list active/completed agents, status, duration, cancel",
+      "status": "done",
+      "priority": "high",
+      "category": "orchestration"
+    },
+    {
+      "id": "f8",
+      "name": "Skills Manager",
+      "description": "Browse skills from .claude/skills/, toggle active, view SKILL.md",
+      "status": "done",
+      "priority": "high",
+      "category": "orchestration"
+    },
+    {
+      "id": "f9",
+      "name": "Usage Metrics",
+      "description": "Tokens in/out, cost estimate, latency per session",
+      "status": "done",
+      "priority": "medium",
+      "category": "orchestration"
+    },
+    {
+      "id": "f10",
+      "name": "Provider Settings",
+      "description": "Add/edit LLM providers: name, base URL, API key, default model",
+      "status": "done",
+      "priority": "high",
+      "category": "settings"
+    },
+    {
+      "id": "f11",
+      "name": "Onboarding Flow",
+      "description": "First-run wizard for API key and provider setup",
+      "status": "done",
+      "priority": "medium",
+      "category": "ux"
+    },
+    {
+      "id": "f12",
+      "name": "Keyboard Shortcuts",
+      "description": "Cmd+N, Cmd+K, Cmd+Enter, Escape for common actions",
+      "status": "done",
+      "priority": "low",
+      "category": "ux"
+    },
+    {
+      "id": "f13",
+      "name": "App Shell Layout",
+      "description": "CSS Grid 3-panel: left sidebar, center chat, right panel + footer",
+      "status": "done",
+      "priority": "high",
+      "category": "foundation"
+    }
   ],
   "suggestions": [
-    { "id": "s1", "title": "Add LSP support", "description": "Integrate Language Server Protocol for intelligent code completion, go-to-definition, and inline diagnostics across all supported languages.", "impact": "high", "effort": "high", "category": "dx" },
-    { "id": "s2", "title": "Offline AI mode", "description": "Bundle a small local LLM (e.g., Phi-3 mini via llama.cpp) for offline usage when no internet connection is available.", "impact": "high", "effort": "high", "category": "ai" },
-    { "id": "s3", "title": "Multi-tab editor", "description": "Support multiple open files simultaneously with tab management, split view, and tab persistence across sessions.", "impact": "medium", "effort": "medium", "category": "ux" },
-    { "id": "s4", "title": "AI code review", "description": "Automatic code review on git diff — highlight potential bugs, style issues, and suggest improvements before commit.", "impact": "high", "effort": "medium", "category": "ai" },
-    { "id": "s5", "title": "Snippet library", "description": "Personal snippet manager with fuzzy search, tags, and AI-assisted snippet generation from selected code.", "impact": "medium", "effort": "low", "category": "dx" }
+    {
+      "id": "s1",
+      "title": "Command palette (Cmd+K)",
+      "description": "Fuzzy-search across sessions, projects, commands, and skills. Faster navigation than clicking through sidebar.",
+      "impact": "high",
+      "effort": "medium",
+      "category": "ux"
+    },
+    {
+      "id": "s2",
+      "title": "Prompt templates library",
+      "description": "Save and reuse common prompts with variables like {{filename}}. Accessible from chat input.",
+      "impact": "high",
+      "effort": "low",
+      "category": "productivity"
+    },
+    {
+      "id": "s3",
+      "title": "Diff viewer for AI code changes",
+      "description": "When AI suggests code changes, show side-by-side diff before applying. Reduces accidental overwrites.",
+      "impact": "high",
+      "effort": "high",
+      "category": "core"
+    },
+    {
+      "id": "s4",
+      "title": "Export session as markdown",
+      "description": "Export full chat history as a clean .md file. Useful for documentation and sharing.",
+      "impact": "medium",
+      "effort": "low",
+      "category": "productivity"
+    },
+    {
+      "id": "s5",
+      "title": "Multi-model comparison",
+      "description": "Send same prompt to 2-3 models simultaneously, compare responses side by side.",
+      "impact": "medium",
+      "effort": "high",
+      "category": "ai"
+    },
+    {
+      "id": "s6",
+      "title": "Local model support (Ollama)",
+      "description": "Connect to Ollama for fully offline AI. Same Provider trait, just different base_url.",
+      "impact": "high",
+      "effort": "low",
+      "category": "ai"
+    }
   ],
   "architecture": {
     "decisions": [
-      { "id": "a1", "title": "Tauri over Electron", "rationale": "Smaller bundle size (~10MB vs ~150MB), better performance, Rust backend for safety", "date": "2026-03-01", "status": "accepted" },
-      { "id": "a2", "title": "Trunk-based development", "rationale": "Short-lived branches, always-deployable main, reduces merge conflicts", "date": "2026-03-01", "status": "accepted" },
-      { "id": "a3", "title": "SQLite via sqlx", "rationale": "Embedded DB, no server required, async support, compile-time query checking", "date": "2026-03-07", "status": "proposed" },
-      { "id": "a4", "title": "AppError unified enum", "rationale": "Single error type with thiserror, serializable for frontend, no unwrap() in production", "date": "2026-03-07", "status": "accepted" }
+      {
+        "id": "a1",
+        "title": "Tauri over Electron",
+        "rationale": "~10MB bundle vs ~150MB, Rust backend for safety and performance, native OS integration without Node.js overhead.",
+        "date": "2026-03-07",
+        "status": "accepted"
+      },
+      {
+        "id": "a2",
+        "title": "Direct LLM API (no middleware)",
+        "rationale": "Simpler architecture, lower latency, full control. Custom provider prioritized, others added via same trait.",
+        "date": "2026-03-08",
+        "status": "accepted"
+      },
+      {
+        "id": "a3",
+        "title": "Streaming via Tauri events (not SSE)",
+        "rationale": "Tauri's event system is more reliable for desktop IPC. Rust emits per-token events, React listens with listen().",
+        "date": "2026-03-08",
+        "status": "accepted"
+      },
+      {
+        "id": "a4",
+        "title": "Zustand for frontend state",
+        "rationale": "Lightweight, no boilerplate, works well with React 19. Separate stores per domain.",
+        "date": "2026-03-08",
+        "status": "accepted"
+      },
+      {
+        "id": "a5",
+        "title": "SQLite via sqlx for persistence",
+        "rationale": "Embedded, no server, async support, compile-time query checking. Stores all app data.",
+        "date": "2026-03-08",
+        "status": "accepted"
+      },
+      {
+        "id": "a6",
+        "title": "CSS Grid for app shell",
+        "rationale": "3-panel layout is simple enough for native CSS Grid. No dependency on docking libraries for MVP.",
+        "date": "2026-03-08",
+        "status": "accepted"
+      },
+      {
+        "id": "a7",
+        "title": "Provider trait abstraction in Rust",
+        "rationale": "Pluggable LLM backends via Rust trait. Custom provider first, then Anthropic/OpenAI/Ollama via same interface.",
+        "date": "2026-03-08",
+        "status": "proposed"
+      }
     ],
     "patterns": [
-      { "name": "Commands as thin wrappers", "description": "Tauri commands only validate input and delegate to services. No business logic in commands." },
-      { "name": "Services layer", "description": "All business logic in src-tauri/src/services/. No Tauri imports. Fully testable." },
-      { "name": "Conventional Commits", "description": "feat/fix/chore/refactor/docs/build/test/perf with optional scope." }
+      {
+        "name": "Commands as thin wrappers",
+        "description": "Tauri commands only validate input and call services. No business logic in command layer."
+      },
+      {
+        "name": "Services layer (no Tauri imports)",
+        "description": "All business logic in src-tauri/src/services/. Fully testable without Tauri runtime."
+      },
+      {
+        "name": "Streaming via emit()",
+        "description": "LLM tokens streamed via app.emit('chat-token', payload). Frontend subscribes with listen('chat-token', cb)."
+      },
+      {
+        "name": "Separate Zustand stores per domain",
+        "description": "useProjectStore, useSessionStore, useChatStore, useSettingsStore, useAgentStore \u2014 no god store."
+      },
+      {
+        "name": "AppError unified enum",
+        "description": "All Rust errors funnel through AppError with thiserror. Serialized to frontend as { kind, message }."
+      }
     ]
   },
   "sessionLog": [
-    { "id": "l1", "timestamp": "2026-03-07T18:30:00Z", "action": "Plan created", "details": "Initial plan created by AI agent during brainstorming session", "agent": "brainstorming" },
-    { "id": "l2", "timestamp": "2026-03-07T18:31:00Z", "action": "Skills created", "details": "git-master and enowx-rust skills added to .claude/skills/", "agent": "skill-creator" },
-    { "id": "l3", "timestamp": "2026-03-07T18:32:00Z", "action": "AGENTS.md created", "details": "Auto-trigger rules for 4 passive skills added to project root", "agent": "mnemosyne" }
+    {
+      "id": "l1",
+      "timestamp": "2026-03-07T18:30:00Z",
+      "action": "Project initialized",
+      "details": "Tauri + React + TypeScript boilerplate created",
+      "agent": "git-master"
+    },
+    {
+      "id": "l2",
+      "timestamp": "2026-03-07T19:00:00Z",
+      "action": "Skills created",
+      "details": "git-master, enowx-rust, plan-visualizer skills added to .claude/skills/",
+      "agent": "skill-creator"
+    },
+    {
+      "id": "l3",
+      "timestamp": "2026-03-07T19:30:00Z",
+      "action": "AGENTS.md created",
+      "details": "Auto-trigger rules for 5 skills added to project root",
+      "agent": "mnemosyne"
+    },
+    {
+      "id": "l4",
+      "timestamp": "2026-03-08T00:00:00Z",
+      "action": "Full project plan created",
+      "details": "Brainstorming session: 4 phases, 18 tasks, 13 features, 6 suggestions, 7 architecture decisions",
+      "agent": "brainstorming"
+    },
+    {
+      "date": "2026-03-08",
+      "summary": "Full MVP implemented: Rust backend (commands/services/models/migrations), streaming chat, 5 Zustand stores, CSS Grid app shell, ChatPanel/ChatMessage/ChatInput/StreamingMessage, ProviderSettings, OnboardingWizard, keyboard shortcuts. Build clean, committed."
+    }
   ]
 }
