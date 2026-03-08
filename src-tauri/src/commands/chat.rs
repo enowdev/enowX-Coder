@@ -21,6 +21,7 @@ pub async fn send_message(
     session_id: String,
     content: String,
     provider_id: Option<String>,
+    model_id: Option<String>,
     app_handle: AppHandle,
 ) -> AppResult<()> {
     chat_service::send_message(
@@ -28,6 +29,7 @@ pub async fn send_message(
         &session_id,
         &content,
         provider_id.as_deref(),
+        model_id.as_deref(),
         &app_handle,
     )
     .await

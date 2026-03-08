@@ -22,7 +22,7 @@ export const AppShell: React.FC = () => {
   const activeSessionId = useSessionStore((s) => s.activeSessionId);
   const setSessions = useSessionStore((s) => s.setSessions);
   const setActiveSessionId = useSessionStore((s) => s.setActiveSessionId);
-  const { setProviders, setDefaultProviderId, defaultProviderId } = useSettingsStore();
+  const { setProviders, setDefaultProviderId, defaultProviderId, selectedModelId } = useSettingsStore();
   const rightSidebarOpen = useUIStore((s) => s.rightSidebarOpen);
   const unlistenRef = useRef<UnlistenFn[]>([]);
 
@@ -138,6 +138,7 @@ export const AppShell: React.FC = () => {
         sessionId: activeSessionId,
         content,
         providerId: defaultProviderId ?? null,
+        modelId: selectedModelId ?? null,
       });
     } catch (err) {
       console.error('send_message error:', err);
