@@ -260,21 +260,6 @@ impl AgentRunner {
                 .execute(&self.db)
                 .await?;
 
-                if parent_agent_run_id.is_none() {
-                    let message_id = Uuid::new_v4().to_string();
-                    let created_at = now_rfc3339();
-                    sqlx::query(
-                        "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
-                    )
-                    .bind(&message_id)
-                    .bind(session_id)
-                    .bind("assistant")
-                    .bind(&output)
-                    .bind(&created_at)
-                    .execute(&self.db)
-                    .await?;
-                }
-
                 let _ = self.app_handle.emit(
                     "agent-done",
                     AgentDoneEvent {

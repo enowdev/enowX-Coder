@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { AgentRunWithTools, AGENT_LABELS, AgentType } from '@/types';
 import { cn } from '@/lib/utils';
 import {
@@ -15,12 +15,8 @@ import {
   Books,
   CaretRight,
   CaretDown,
-  CheckCircle,
-  XCircle,
   CircleNotch,
-  WarningCircle,
   Brain,
-  Wrench,
 } from '@phosphor-icons/react';
 
 interface AgentRunCardProps {
@@ -43,139 +39,128 @@ const AGENT_ICONS: Record<AgentType, React.ElementType> = {
 };
 
 export function AgentRunCard({ run, allRuns }: AgentRunCardProps) {
-  const [toolsExpanded, setToolsExpanded] = useState(false);
-  const Icon = AGENT_ICONS[run.agentType as AgentType] || Robot;
-  
-  const children = allRuns.filter(r => r.parentAgentRunId === run.id);
-  const hasToolActivity = (run.toolCalls?.length ?? 0) > 0;
-  const latestTool = hasToolActivity ? run.toolCalls[run.toolCalls.length - 1] : null;
+  const [thinkingOpen, setThinkingOpen] = useState(true);
+  const [toolsOpen, setToolsOpen] = useState(true);
+  const [resultOpen, setResultOpen] = useState(true);
 
-  const getStatusBadge = () => {
-    switch (run.status) {
-      case 'pending':
-        return <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-subtle)]">Pending</span>;
-      case 'running':
-        return <span className="text-[10px] uppercase tracking-wider font-bold text-white animate-pulse">Running</span>;
-      case 'completed':
-        return <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">Completed</span>;
-      case 'failed':
-        return <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)] line-through">Failed</span>;
-      default:
-        return null;
+  const Icon = AGENT_ICONS[run.agentType as AgentType] || Robot;
+  const children = allRuns.filter((r) => r.parentAgentRunId === run.id);
+  const hasToolActivity = (run.toolCalls?.length ?? 0) > 0;
+
+  const thinkingText = useMemo(() => {
+    if (run.status === 'failed') return run.error ?? 'Execution failed.';
+    if (run.status === 'running' && !hasToolActivity) {
+      return run.streamingText.trim().length > 0
+        ? `Analyzing: ${run.streamingText.trim()}`
+        : 'Planning next action...';
     }
-  };
+    if (run.status === 'running' && hasToolActivity) {
+      return 'Context prepared. Proceeding to tool execution.';
+    }
+    if (run.status === 'completed') {
+      return 'Reasoning phase completed.';
+    }
+    return 'Pending execution...';
+  }, [run.status, run.streamingText, run.error, hasToolActivity]);
 
   return (
     <div
       className={cn(
-        "flex flex-col space-y-3 mb-4",
-        run.parentAgentRunId !== null
-          ? "border-l-2 border-[var(--border)] ml-4 pl-3"
-          : "w-full"
+        'flex flex-col space-y-3 mb-4',
+        run.parentAgentRunId !== null ? 'border-l-2 border-[var(--border)] ml-4 pl-3' : 'w-full'
       )}
     >
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/30 overflow-hidden text-sm">
-        <div className="flex items-center justify-between p-3 border-b border-[var(--border)] bg-[var(--surface)]">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)]/80 overflow-hidden text-sm">
+        <div className="flex items-center justify-between px-3 py-2.5 border-b border-[var(--border)] bg-[var(--surface-2)]">
           <div className="flex items-center space-x-2">
             <Icon size={16} weight="duotone" className="text-[var(--text-muted)]" />
-            <span className="font-medium text-[var(--text)]">
+            <span className="font-semibold text-[var(--text)] tracking-wide">
               {AGENT_LABELS[run.agentType as AgentType] || run.agentType}
             </span>
           </div>
-          <div className="flex items-center space-x-2">
-            {getStatusBadge()}
-          </div>
+          <span className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">
+            {run.status}
+          </span>
         </div>
 
-        <div className="p-3 space-y-3 text-[var(--text-muted)]">
-          {run.status === 'running' && !hasToolActivity && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-3)]/40 px-3 py-2.5">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">
-                <Brain size={12} weight="duotone" />
+        <div className="p-3 space-y-3">
+          <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden">
+            <button
+              onClick={() => setThinkingOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-left"
+            >
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-[var(--text-muted)]">
+                <Brain size={13} weight="duotone" />
                 <span>Thinking</span>
               </div>
-              <div className="mt-2 text-[12px] text-[var(--text-muted)] leading-relaxed">
-                {run.streamingText.trim().length > 0
-                  ? 'Analyzing task context and preparing next action...'
-                  : 'Planning next step...'}
+              {thinkingOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
+            </button>
+            {thinkingOpen && (
+              <div className="px-3 pb-3 text-[12px] leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+                {thinkingText}
               </div>
-            </div>
-          )}
+            )}
+          </section>
 
-          {run.status === 'running' && hasToolActivity && latestTool && (
-            <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-3)]/40 px-3 py-2.5">
-              <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider font-bold text-[var(--text-muted)]">
-                <Wrench size={12} weight="duotone" />
-                <span>Tool Execution</span>
+          <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden">
+            <button
+              onClick={() => setToolsOpen((v) => !v)}
+              className="w-full flex items-center justify-between px-3 py-2 text-left"
+            >
+              <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-[var(--text-muted)]">
+                <Terminal size={13} weight="duotone" />
+                <span>Execute Tools</span>
+                <span className="text-[10px] tracking-normal normal-case">({run.toolCalls.length})</span>
               </div>
-              <div className="mt-2 text-[12px] text-[var(--text)] font-mono">
-                {latestTool.toolName}
-              </div>
-              <div className="mt-1 flex items-center space-x-1 text-[var(--text-subtle)] h-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-                <div className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
-              </div>
-            </div>
-          )}
-
-          {!run.streamingText && run.status === 'running' && !hasToolActivity && (
-            <div className="flex items-center space-x-1 text-[var(--text-subtle)] h-4">
-              <div className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '0ms' }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '150ms' }} />
-              <div className="w-1.5 h-1.5 rounded-full bg-current animate-bounce" style={{ animationDelay: '300ms' }} />
-            </div>
-          )}
-
-          {run.status === 'completed' && run.output && !run.streamingText && run.parentAgentRunId !== null && (
-            <div className="whitespace-pre-wrap font-mono text-[11px] leading-relaxed">
-              {run.output}
-            </div>
-          )}
-
-          {run.status === 'failed' && run.error && (
-            <div className="italic text-[var(--text-muted)] text-[12px] flex items-start space-x-2">
-              <WarningCircle size={16} className="mt-0.5 shrink-0" />
-              <span>{run.error}</span>
-            </div>
-          )}
-
-          {run.toolCalls && run.toolCalls.length > 0 && (
-            <div className="pt-2 border-t border-[var(--border)]/50">
-              <button
-                onClick={() => setToolsExpanded(!toolsExpanded)}
-                className="flex items-center space-x-1 text-[11px] font-medium text-[var(--text-subtle)] hover:text-[var(--text)] transition-colors"
-              >
-                {toolsExpanded ? <CaretDown size={12} /> : <CaretRight size={12} />}
-                <span>Tools ({run.toolCalls.length})</span>
-              </button>
-
-              {toolsExpanded && (
-                <div className="mt-2 space-y-2">
-                  {run.toolCalls.map((tool) => (
-                    <div key={tool.id} className="bg-[var(--surface-3)]/30 rounded border border-[var(--border)] p-2">
-                      <div className="flex items-center space-x-2 mb-1 text-[11px]">
-                        {tool.status === 'completed' && <CheckCircle size={12} className="text-[var(--text-muted)]" />}
-                        {tool.status === 'failed' && <XCircle size={12} className="text-[var(--text-muted)]" />}
-                        {tool.status === 'running' && <CircleNotch size={12} className="text-[var(--text-muted)] animate-spin" />}
-                        {tool.status === 'pending' && <CircleNotch size={12} className="text-[var(--text-subtle)]" />}
-                        <span className="font-mono text-[var(--text)]">{tool.toolName}</span>
+              {toolsOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
+            </button>
+            {toolsOpen && (
+              <div className="px-3 pb-3 space-y-2">
+                {run.toolCalls.length === 0 ? (
+                  <div className="text-[12px] text-[var(--text-subtle)]">No tool calls yet.</div>
+                ) : (
+                  run.toolCalls.map((tool) => (
+                    <div key={tool.id} className="rounded border border-[var(--border)] bg-[var(--surface-3)]/40 p-2">
+                      <div className="flex items-center gap-2 text-[11px] font-mono text-[var(--text)]">
+                        {tool.status === 'running' && <CircleNotch size={12} className="animate-spin" />}
+                        <span>{tool.toolName}</span>
+                        <span className="text-[10px] text-[var(--text-subtle)]">{tool.status}</span>
                       </div>
-                      <div className="font-mono text-[10px] text-[var(--text-subtle)] truncate">
+                      <div className="mt-1 text-[10px] font-mono text-[var(--text-muted)] whitespace-pre-wrap break-all">
                         {tool.input}
                       </div>
                     </div>
-                  ))}
+                  ))
+                )}
+              </div>
+            )}
+          </section>
+
+          {(run.status === 'completed' || run.status === 'failed') && (
+            <section className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/50 overflow-hidden">
+              <button
+                onClick={() => setResultOpen((v) => !v)}
+                className="w-full flex items-center justify-between px-3 py-2 text-left"
+              >
+                <div className="flex items-center gap-2 text-[11px] uppercase tracking-widest font-bold text-[var(--text-muted)]">
+                  <Robot size={13} weight="duotone" />
+                  <span>Result</span>
+                </div>
+                {resultOpen ? <CaretDown size={12} /> : <CaretRight size={12} />}
+              </button>
+              {resultOpen && (
+                <div className="px-3 pb-3 text-[12px] leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+                  {run.status === 'failed' ? run.error : run.output}
                 </div>
               )}
-            </div>
+            </section>
           )}
         </div>
       </div>
 
       {children.length > 0 && (
         <div className="flex flex-col space-y-3 mt-1">
-          {children.map(child => (
+          {children.map((child) => (
             <AgentRunCard key={child.id} run={child} allRuns={allRuns} />
           ))}
         </div>

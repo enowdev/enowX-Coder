@@ -222,13 +222,6 @@ export const AppShell: React.FC = () => {
             output,
             completedAt: new Date().toISOString(),
           });
-
-          const sessionId = useSessionStore.getState().activeSessionId;
-          if (sessionId) {
-            invoke<Message[]>('get_messages', { sessionId })
-              .then((msgs) => useChatStore.getState().setMessages(msgs))
-              .catch(console.error);
-          }
         }
       );
 

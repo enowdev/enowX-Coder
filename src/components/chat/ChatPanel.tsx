@@ -32,13 +32,14 @@ export const ChatPanel: React.FC = () => {
     if (!userScrolledUp.current) {
       scrollToBottom('smooth');
     }
-  }, [messages, scrollToBottom]);
+  }, [messages, agentRuns, scrollToBottom]);
 
   useEffect(() => {
-    if (isStreaming && !userScrolledUp.current) {
+    const hasRunningAgent = agentRuns.some((run) => run.status === 'running');
+    if ((isStreaming || hasRunningAgent) && !userScrolledUp.current) {
       scrollToBottom('instant');
     }
-  }, [streamingText, isStreaming, scrollToBottom]);
+  }, [streamingText, isStreaming, agentRuns, scrollToBottom]);
 
   useEffect(() => {
     if (!isStreaming) {
@@ -61,11 +62,7 @@ export const ChatPanel: React.FC = () => {
     );
   }
 
-  const topLevelRuns = agentRuns.filter(
-    (r) =>
-      r.parentAgentRunId === null
-      && (r.status === 'pending' || r.status === 'running' || r.status === 'failed')
-  );
+  const topLevelRuns = agentRuns.filter((r) => r.parentAgentRunId === null);
   const combinedItems = [
     ...messages.map(m => ({ type: 'message' as const, data: m, date: new Date(m.createdAt).getTime() })),
     ...topLevelRuns.map(r => ({ type: 'agent' as const, data: r, date: new Date(r.createdAt).getTime() }))
