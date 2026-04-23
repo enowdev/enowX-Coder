@@ -55,10 +55,10 @@
 
 ## 📸 Screenshots
 
-### Chat Interface - Dark Mode
-*AI-powered conversations with warm Claude-inspired color palette*
+### enowX Flux - AI Chat Interface
+*Powerful AI-powered conversations with enowX Flux integration and warm Claude-inspired dark theme*
 
-![Chat Interface](screenshots/enowX%20Flux.png)
+![enowX Flux](screenshots/enowX%20Flux.png)
 
 ### Chat Interface - Light Mode
 *Clean and modern light theme for comfortable daytime coding*
