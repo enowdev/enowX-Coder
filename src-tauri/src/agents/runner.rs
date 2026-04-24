@@ -1,6 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::time::Duration;
 
+use futures_util::stream::FuturesUnordered;
 use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde::Serialize;
@@ -8,23 +10,234 @@ use serde_json::{json, Value};
 use sqlx::SqlitePool;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter};
-use tokio::task::JoinSet;
+use tokio::sync::oneshot;
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::agents::prompts::get_prompt;
 use crate::error::{AppError, AppResult};
 use crate::services::{now_rfc3339, provider_service};
+use crate::state::PermissionState;
 use crate::tools::{ToolCall, ToolExecutor, ToolName};
 
-const MAX_REACT_ITERATIONS: usize = 20;
+const MAX_REACT_ITERATIONS: usize = 10;
 const SYNTHESIS_REACT_ITERATIONS: usize = 8;
 const LANGUAGE_GUARD: &str =
     "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.";
 
+const PREVIEW_GUIDE: &str = r#"INTERACTIVE PREVIEW — VISUAL CREATION SYSTEM
+
+When the user asks for a visualization, diagram, chart, interactive demo, UI mockup, or any visual/interactive HTML content, output it directly in your response as a fenced code block with the language tag `html:preview`. Do NOT use write_file — the app renders it as a live interactive preview inline. Only use write_file when the user explicitly asks to save a file on disk.
+
+Format: ```html:preview followed by a COMPLETE standalone HTML document (DOCTYPE, html, head, body).
+
+The preview iframe has a full design system pre-loaded: CSS variables, SVG color ramp classes, pre-styled form elements, and light/dark mode support. Your HTML inherits all of this automatically.
+
+## Core Design Philosophy
+- **Seamless**: The widget should feel like a natural extension of the chat, not an embed from somewhere else.
+- **Flat**: No gradients, mesh backgrounds, noise textures, drop shadows, blur, glow, or neon effects. Clean flat surfaces only.
+- **Transparent background**: Do NOT set background color on `<body>` or outer containers. The host app provides the background. Only set background on inner cards/surfaces using `var(--color-background-secondary)`.
+- **Compact**: Show the essential visual inline. All explanatory text goes in your response text OUTSIDE the code block.
+- **Text goes in your response, visuals go in the widget** — All explanatory text, descriptions, introductions, and summaries must be written as normal response text OUTSIDE the code block. The widget should contain ONLY the visual element. Never put paragraphs of explanation inside the HTML.
+- **Streaming-safe**: `<style>` (short, ≤15 lines) → content HTML → `<script>` last. Prefer inline `style="..."`.
+- No comments. No emoji. No `display:none` sections. No tabs or carousels during streaming.
+
+## Typography
+- Two weights only: 400 regular, 500 bold. Never 600/700.
+- h1=22px, h2=18px, h3=16px (all weight 500). Body=16px, weight 400, line-height 1.7.
+- Min font-size: 11px. Sentence case always, never Title Case or ALL CAPS.
+- Use `var(--font-sans)` (default), `var(--font-mono)` for code.
+- No mid-sentence bolding. Entity names go in `code style` not **bold**.
+
+## CSS Variables (pre-loaded, auto light/dark)
+- Backgrounds: `var(--color-background-primary)` (white/page), `-secondary` (surfaces/cards), `-tertiary` (deeper)
+- Text: `var(--color-text-primary)` (main), `-secondary` (muted), `-tertiary` (hints)
+- Borders: `var(--color-border-tertiary)` (0.15α default), `-secondary` (0.3α hover), `-primary` (0.4α focus)
+- Semantic: `-info`, `-danger`, `-success`, `-warning` for bg/text/border
+- Radius: `var(--border-radius-md)` (8px), `-lg` (12px preferred for cards), `-xl` (16px)
+- Never hardcode colors like `color: #333` — use CSS variables. They auto-adapt to light/dark.
+- Never use `position: fixed` — the iframe sizes to content height, fixed elements collapse it.
+
+## Color Palette (9 ramps, 7 stops each: 50=lightest → 900=darkest)
+| Ramp | Class | 50 (fill) | 200 | 400 (accent) | 600 (stroke) | 800 (text) |
+|------|-------|-----------|-----|-------------|-------------|-----------|
+| Purple | c-purple | #EEEDFE | #AFA9EC | #7F77DD | #534AB7 | #3C3489 |
+| Teal | c-teal | #E1F5EE | #5DCAA5 | #1D9E75 | #0F6E56 | #085041 |
+| Coral | c-coral | #FAECE7 | #F0997B | #D85A30 | #993C1D | #712B13 |
+| Blue | c-blue | #E6F1FB | #85B7EB | #378ADD | #185FA5 | #0C447C |
+| Amber | c-amber | #FAEEDA | #EF9F27 | #BA7517 | #854F0B | #633806 |
+| Green | c-green | #EAF3DE | #97C459 | #639922 | #3B6D11 | #27500A |
+| Red | c-red | #FCEBEB | #F09595 | #E24B4A | #A32D2D | #791F1F |
+| Gray | c-gray | #F1EFE8 | #B4B2A9 | #888780 | #5F5E5A | #444441 |
+| Pink | c-pink | #FBEAF0 | #ED93B1 | #D4537E | #993556 | #72243E |
+
+**Color assignment rules**:
+- Color encodes **meaning**, not sequence. Don't cycle through colors like a rainbow.
+- Group nodes by **category** — all nodes of the same type share one color.
+- Use **gray for neutral/structural** nodes (start, end, generic steps).
+- Use **≤2-3 ramps** per diagram. More = visual noise.
+- Prefer purple, teal, coral, pink for general categories. Reserve blue/green/amber/red for semantic meaning (info/success/warning/error).
+- Text on colored bg: use 800 or 900 stop from the same ramp, never black.
+- When a box has title + subtitle, use different stops: title darker (800), subtitle lighter (600).
+
+## SVG Diagrams
+- `<svg width="100%" viewBox="0 0 680 H">` — always 680px wide. H = content bottom + 40px.
+- **Do NOT change 680** — it matches container width for 1:1 pixel rendering. If content is narrow, keep viewBox at 680 and center content.
+- Safe area: x=40..640, y=40..(H-40). Background transparent. No wrapper div.
+- **Pre-loaded text classes**: `.t` (14px), `.ts` (12px secondary), `.th` (14px bold 500). Every `<text>` needs a class.
+- **Pre-loaded shape classes**: `.box` (neutral fill), `.node` (clickable+hover), `.arr` (arrow line 1.5px), `.leader` (dashed 0.5px).
+- **Color ramp classes**: `class="c-blue"` on `<g>` wrapping shape+text. Sets fill, stroke, text colors for both light/dark automatically. Apply to `<g>`, `<rect>`, `<circle>`, `<ellipse>` — NOT to `<path>`. Never write `<style>` blocks for colors.
+- **c-{ramp} nesting**: These use direct-child selectors (`>`). Put `c-*` on the innermost group holding shapes, not a wrapper.
+- Arrow marker (include in every SVG `<defs>`): `<marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker>`
+- Stroke-width: 0.5 for borders. rx=8 default. Connectors MUST have `fill="none"`.
+- Size boxes to fit text: chars × 8px + 24px padding. 60px min spacing between boxes.
+- Text: `text-anchor="middle" dominant-baseline="central"` for centered text in boxes.
+- Make nodes clickable: `<g class="node c-blue" onclick="sendPrompt('Tell me more about X')">`.
+- SVG `<text>` never auto-wraps. Each line needs explicit `<tspan x="..." dy="1.2em">`.
+- No rotated text. No icons inside boxes (text only). Minimize standalone floating labels.
+- Lines must not cross unrelated boxes. If direct path crosses something, use L-bend: `<path d="M x1 y1 L x1 ymid L x2 ymid L x2 y2" fill="none"/>`.
+
+### Flowchart patterns:
+Single-line node (44px): `<g class="node c-blue"><rect x="100" y="20" width="180" height="44" rx="8" stroke-width="0.5"/><text class="th" x="190" y="42" text-anchor="middle" dominant-baseline="central">Label</text></g>`
+Two-line node (56px): title `.th` at y=38, subtitle `.ts` at y=56.
+Connector: `<line x1="200" y1="76" x2="200" y2="120" class="arr" marker-end="url(#arrow)"/>`
+Neutral node: use `class="box"` for auto-themed fill/stroke.
+
+## Diagram Types — Pick the Right One
+
+**Route on the verb, not the noun.** Same subject, different diagram depending on what was asked:
+
+| User says | Type | What to draw |
+|---|---|---|
+| "how does X work" | **Illustrative** | Spatial metaphor showing the mechanism |
+| "X architecture" | **Structural** | Labeled boxes showing containment |
+| "what are the steps" | **Flowchart** | Sequential boxes and arrows |
+| "explain X" | **Illustrative** | Visual metaphor that builds intuition |
+
+### Flowchart
+For sequential processes, cause-and-effect, decision trees. Prefer single-direction flows (top-down or left-right). Max 4-5 nodes per diagram. Keep all nodes same height for same content type.
+
+### Structural diagram
+For containment — things inside other things (VPC/subnet/instance, cell organelles, file systems). Large rounded rects as containers (rx=20, lightest fill), smaller rects inside as regions. 20px min padding inside containers. Max 2-3 nesting levels. Use different color ramps for nested levels.
+
+### Illustrative diagram
+For building **intuition**. The most powerful diagram type. Physical things get cross-sections. Abstract things get **spatial metaphors**: an LLM is stacked layers with attention threads, gradient descent is a ball rolling down a surface, a hash table is buckets with items falling in.
+
+**Rules for illustrative diagrams**:
+- Shapes are freeform: `<path>`, `<ellipse>`, `<circle>`, `<polygon>`, curved lines.
+- Layout follows the subject's geometry, not a grid.
+- Color encodes **intensity**: warm ramps = heat/energy/active, cool = cold/calm/dormant, gray = inert structure.
+- Layering and overlap encouraged for shapes (but NEVER let strokes cross text — 8px clear air around labels).
+- Small shape indicators allowed: triangles for flames, circles for bubbles, wavy lines for steam.
+- One `<linearGradient>` per diagram permitted (only for continuous physical properties like temperature).
+- Labels go outside the drawn object with thin leader lines. Pick one side for all labels.
+- **Prefer interactive over static**: if the real system has a control, give the diagram that control (slider for temperature, toggle for on/off, click to highlight).
+
+### Multiple diagrams for complex topics
+For complex explanations, use **multiple `html:preview` blocks** — each with its own diagram. This creates a visual narrative:
+- Always add **prose text between diagrams** explaining what the next one shows.
+- Never stack multiple preview blocks back-to-back without text.
+- Promise only what you deliver — if you say "three diagrams", include all three.
+
+## Chart.js
+- Wrap canvas: `<div style="position:relative;width:100%;height:300px"><canvas id="c"></canvas></div>`
+- Height on wrapper ONLY, never on canvas. Options: `responsive:true, maintainAspectRatio:false`.
+- For horizontal bar charts: wrapper height ≥ (num_bars × 40) + 80 pixels.
+- Load UMD: `<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js" onload="initChart()"></script>`
+- Define `function initChart() { new Chart(...) }` in inline script. Add `if(window.Chart) initChart();` as fallback.
+- Canvas can't resolve CSS vars — use hardcoded hex from the color palette above.
+- Always disable default legend: `plugins:{legend:{display:false}}`. Build custom HTML legend with small squares:
+```html
+<div style="display:flex;flex-wrap:wrap;gap:16px;margin-bottom:8px;font-size:12px;color:var(--color-text-secondary)">
+  <span style="display:flex;align-items:center;gap:4px"><span style="width:10px;height:10px;border-radius:2px;background:#378ADD"></span>Chrome 65%</span>
+</div>
+```
+- Include value/percentage in each legend label for categorical data (pie, donut, single-series bar).
+- Negative values: `-$5M` not `$-5M`. Sign before currency symbol.
+- Multiple charts: unique IDs (`chart1`, `chart2`), each with own canvas+div pair.
+- For bubble/scatter: pad scale range ~10% beyond data range to prevent clipping.
+- For ≤12 categories: `scales.x.ticks: { autoSkip: false, maxRotation: 45 }` to show all labels.
+
+## Interactive Widgets
+Form elements are pre-styled — write bare `<input>`, `<button>`, `<select>` tags. They look correct automatically.
+
+### Slider pattern:
+```html
+<div style="display:flex;align-items:center;gap:12px;margin:0 0 1.5rem">
+  <label style="font-size:14px;color:var(--color-text-secondary)">Years</label>
+  <input type="range" min="1" max="40" value="20" id="years" style="flex:1" />
+  <span style="font-size:14px;font-weight:500;min-width:24px" id="years-out">20</span>
+</div>
+```
+
+### Result display:
+```html
+<div style="display:flex;align-items:baseline;gap:8px;margin:0 0 1.5rem">
+  <span style="font-size:14px;color:var(--color-text-secondary)">£1,000 →</span>
+  <span style="font-size:24px;font-weight:500" id="result">£3,870</span>
+</div>
+```
+
+- **Round every displayed number** — JS float math leaks artifacts. Use `Math.round()`, `.toFixed(n)`, or `Intl.NumberFormat`. Set `step="1"` on range sliders.
+- Use `sendPrompt(text)` for follow-up actions that benefit from AI thinking.
+- CDN allowlist: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.
+
+## UI Components
+
+### Metric cards
+For summary numbers (revenue, count, percentage). Use pre-loaded classes:
+```html
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px">
+  <div class="metric-card">
+    <div class="metric-label">Revenue</div>
+    <div class="metric-value">$1.2M</div>
+    <div class="metric-change up">↑ 12%</div>
+  </div>
+</div>
+```
+
+### Data record card
+Wrap in a single raised card for bounded UI objects (contact card, receipt, order):
+```html
+<div style="background:var(--color-background-primary);border-radius:var(--border-radius-lg);border:0.5px solid var(--color-border-tertiary);padding:1rem 1.25rem">
+  <!-- content -->
+</div>
+```
+
+### Comparison grid
+Side-by-side cards for options. Use `repeat(auto-fit, minmax(160px, 1fr))`. Highlight recommended option with `border: 2px solid var(--color-border-info)` and a small badge.
+
+### Mockup presentation
+Contained mockups (mobile screens, chat threads, modals) should sit on a background surface. Full-width mockups (dashboards, settings pages) don't need a wrapper.
+
+## Art and Illustration
+For creative requests ("draw me a sunset", "create a geometric pattern"):
+- Fill the canvas — art should feel rich, not sparse.
+- Bold colors: mix color ramps freely. Custom `<style>` color blocks are fine for art.
+- Layer overlapping opaque shapes for depth.
+- Organic forms with `<path>` curves, `<ellipse>`, `<circle>`.
+- Texture via repetition (parallel lines, dots, hatching) not raster effects.
+- Geometric patterns with `<g transform="rotate()">` for radial symmetry.
+- CSS `@keyframes` animations permitted (only `transform` and `opacity`). Wrap in `@media (prefers-reduced-motion: no-preference)`."#;
+
+/// Parameters for running an agent
+pub struct AgentRunParams<'a> {
+    pub session_id: &'a str,
+    pub agent_type: &'a str,
+    pub task: &'a str,
+    pub project_path: &'a str,
+    pub provider_id: Option<&'a str>,
+    pub model_id: Option<&'a str>,
+    pub flux_enabled: bool,
+}
+
+/// Internal execution context to reduce parameter count
 #[derive(Clone)]
 pub struct AgentRunner {
     pub db: SqlitePool,
     pub app_handle: AppHandle,
+    pub permissions: PermissionState,
+    pub cancel_token: CancellationToken,
 }
 
 pub trait TokenSink: Send + Sync {
@@ -49,158 +262,110 @@ impl TokenSink for NoopTokenSink {
     fn send(&self, _token: &str) {}
 }
 
-impl AgentRunner {
-    pub fn new(db: SqlitePool, app_handle: AppHandle) -> Self {
-        Self { db, app_handle }
-    }
+/// Internal execution context for agent runs
+struct InternalRunContext<'a> {
+    session_id: &'a str,
+    agent_type: &'a str,
+    task: &'a str,
+    project_path: &'a str,
+    provider_id: Option<&'a str>,
+    model_id: Option<&'a str>,
+    parent_agent_run_id: Option<&'a str>,
+    flux_enabled: bool,
+}
 
-    pub async fn run(
-        &self,
-        session_id: &str,
-        agent_type: &str,
-        task: &str,
-        project_path: &str,
-        provider_id: Option<&str>,
-        model_id: Option<&str>,
-        on_token: Channel<String>,
-    ) -> AppResult<String> {
-        let token_sink = ChannelTokenSink { channel: on_token };
-
-        self.run_internal(
+impl<'a> InternalRunContext<'a> {
+    #[allow(clippy::too_many_arguments)]
+    fn new(
+        session_id: &'a str,
+        agent_type: &'a str,
+        task: &'a str,
+        project_path: &'a str,
+        provider_id: Option<&'a str>,
+        model_id: Option<&'a str>,
+        parent_agent_run_id: Option<&'a str>,
+        flux_enabled: bool,
+    ) -> Self {
+        Self {
             session_id,
             agent_type,
             task,
             project_path,
             provider_id,
             model_id,
-            None,
-            &token_sink,
-        )
-        .await
+            parent_agent_run_id,
+            flux_enabled,
+        }
+    }
+}
+
+/// Parameters for running a subagent
+struct SubagentParams {
+    session_id: String,
+    agent_type: String,
+    task: String,
+    project_path: String,
+    provider_id: Option<String>,
+    model_id: Option<String>,
+    parent_agent_run_id: String,
+    flux_enabled: bool,
+}
+
+impl AgentRunner {
+    pub fn new(db: SqlitePool, app_handle: AppHandle, permissions: PermissionState, cancel_token: CancellationToken) -> Self {
+        Self { db, app_handle, permissions, cancel_token }
     }
 
-    async fn run_subagent(
+    pub async fn run(
         &self,
-        session_id: &str,
-        agent_type: &str,
-        task: &str,
-        project_path: &str,
-        provider_id: Option<&str>,
-        model_id: Option<&str>,
-        parent_agent_run_id: &str,
+        params: AgentRunParams<'_>,
+        on_token: Channel<String>,
     ) -> AppResult<String> {
-        let token_sink = NoopTokenSink;
-        let agent_run_id = Uuid::new_v4().to_string();
-        let started_at = now_rfc3339();
-
-        sqlx::query(
-            "INSERT INTO agent_runs (id, session_id, agent_type, status, input, started_at, created_at, parent_agent_run_id, project_path) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
-        )
-        .bind(&agent_run_id)
-        .bind(session_id)
-        .bind(agent_type)
-        .bind("running")
-        .bind(task)
-        .bind(&started_at)
-        .bind(&started_at)
-        .bind(Some(parent_agent_run_id))
-        .bind(project_path)
-        .execute(&self.db)
-        .await?;
-
-        let _ = self.app_handle.emit(
-            "agent-started",
-            AgentStartedEvent {
-                agent_run_id: agent_run_id.clone(),
-                agent_type: agent_type.to_string(),
-                parent_agent_run_id: Some(parent_agent_run_id.to_string()),
-            },
+        let token_sink = ChannelTokenSink { channel: on_token };
+        let ctx = InternalRunContext::new(
+            params.session_id,
+            params.agent_type,
+            params.task,
+            params.project_path,
+            params.provider_id,
+            params.model_id,
+            None,
+            params.flux_enabled,
         );
 
-        let result = self
-            .execute_agent_leaf(
-                &agent_run_id,
-                agent_type,
-                task,
-                project_path,
-                provider_id,
-                model_id,
-                &token_sink,
-            )
-            .await;
+        self.run_internal(&ctx, &token_sink).await
+    }
 
-        match result {
-            Ok(output) => {
-                let completed_at = now_rfc3339();
-                sqlx::query(
-                    "UPDATE agent_runs SET status = ?1, output = ?2, completed_at = ?3 WHERE id = ?4",
-                )
-                .bind("completed")
-                .bind(&output)
-                .bind(&completed_at)
-                .bind(&agent_run_id)
-                .execute(&self.db)
-                .await?;
-
-                let _ = self.app_handle.emit(
-                    "agent-done",
-                    AgentDoneEvent {
-                        agent_run_id,
-                        output: output.clone(),
-                    },
-                );
-
-                Ok(output)
-            }
-            Err(error) => {
-                let completed_at = now_rfc3339();
-                let error_message = error.to_string();
-
-                sqlx::query(
-                    "UPDATE agent_runs SET status = ?1, error = ?2, completed_at = ?3 WHERE id = ?4",
-                )
-                .bind("failed")
-                .bind(&error_message)
-                .bind(&completed_at)
-                .bind(&agent_run_id)
-                .execute(&self.db)
-                .await?;
-
-                let _ = self.app_handle.emit(
-                    "agent-error",
-                    AgentErrorEvent {
-                        agent_run_id,
-                        error: error_message,
-                    },
-                );
-
-                Err(error)
-            }
-        }
+    async fn run_subagent_internal(&self, params: SubagentParams) -> AppResult<String> {
+        let token_sink = NoopTokenSink;
+        let ctx = InternalRunContext::new(
+            &params.session_id,
+            &params.agent_type,
+            &params.task,
+            &params.project_path,
+            params.provider_id.as_deref(),
+            params.model_id.as_deref(),
+            Some(&params.parent_agent_run_id),
+            params.flux_enabled,
+        );
+        self.run_internal(&ctx, &token_sink).await
     }
 
     async fn run_internal<S: TokenSink + Sync>(
         &self,
-        session_id: &str,
-        agent_type: &str,
-        task: &str,
-        project_path: &str,
-        provider_id: Option<&str>,
-        model_id: Option<&str>,
-        parent_agent_run_id: Option<&str>,
+        ctx: &InternalRunContext<'_>,
         token_sink: &S,
     ) -> AppResult<String> {
-        if parent_agent_run_id.is_none() {
+        if ctx.parent_agent_run_id.is_none() {
             let message_id = Uuid::new_v4().to_string();
             let created_at = now_rfc3339();
             sqlx::query(
                 "INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?1, ?2, ?3, ?4, ?5)",
             )
             .bind(&message_id)
-            .bind(session_id)
+            .bind(ctx.session_id)
             .bind("user")
-            .bind(task)
+            .bind(ctx.task)
             .bind(&created_at)
             .execute(&self.db)
             .await?;
@@ -214,14 +379,14 @@ impl AgentRunner {
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         )
         .bind(&agent_run_id)
-        .bind(session_id)
-        .bind(agent_type)
+        .bind(ctx.session_id)
+        .bind(ctx.agent_type)
         .bind("running")
-        .bind(task)
+        .bind(ctx.task)
         .bind(&started_at)
         .bind(&started_at)
-        .bind(parent_agent_run_id)
-        .bind(project_path)
+        .bind(ctx.parent_agent_run_id)
+        .bind(ctx.project_path)
         .execute(&self.db)
         .await?;
 
@@ -229,20 +394,15 @@ impl AgentRunner {
             "agent-started",
             AgentStartedEvent {
                 agent_run_id: agent_run_id.clone(),
-                agent_type: agent_type.to_string(),
-                parent_agent_run_id: parent_agent_run_id.map(std::string::ToString::to_string),
+                agent_type: ctx.agent_type.to_string(),
+                parent_agent_run_id: ctx.parent_agent_run_id.map(std::string::ToString::to_string),
             },
         );
 
         let result = self
             .execute_agent(
                 &agent_run_id,
-                session_id,
-                agent_type,
-                task,
-                project_path,
-                provider_id,
-                model_id,
+                ctx,
                 token_sink,
             )
             .await;
@@ -297,37 +457,162 @@ impl AgentRunner {
         }
     }
 
+    /// Load conversation history from DB with smart context management:
+    /// - Sliding window: max 20 recent message pairs
+    /// - Strip html:preview blocks from assistant outputs (saves ~5-10KB per widget)
+    /// - Token budget: ~8K tokens max for history (~32K chars)
+    /// - Smarter truncation: user messages 500 chars, assistant 1500 chars
+    async fn load_conversation_history(
+        &self,
+        session_id: &str,
+    ) -> AppResult<Vec<ConversationMessage>> {
+        const MAX_HISTORY_PAIRS: usize = 20;
+        const MAX_TOTAL_CHARS: usize = 32_000; // ~8K tokens
+        const MAX_USER_MSG_CHARS: usize = 500;
+        const MAX_ASSISTANT_MSG_CHARS: usize = 1500;
+
+        // Load user messages
+        let user_messages = sqlx::query_as::<_, crate::models::Message>(
+            "SELECT id, session_id, role, content, created_at FROM messages \
+             WHERE session_id = ?1 ORDER BY created_at ASC",
+        )
+        .bind(session_id)
+        .fetch_all(&self.db)
+        .await?;
+
+        // Load completed top-level agent runs (not subagents)
+        let agent_runs = sqlx::query_as::<_, crate::models::AgentRun>(
+            "SELECT id, session_id, agent_type, status, input, output, error, started_at, completed_at, created_at, parent_agent_run_id, project_path \
+             FROM agent_runs \
+             WHERE session_id = ?1 AND parent_agent_run_id IS NULL AND status = 'completed' AND output IS NOT NULL \
+             ORDER BY created_at ASC",
+        )
+        .bind(session_id)
+        .fetch_all(&self.db)
+        .await?;
+
+        // Interleave chronologically
+        let mut history: Vec<(String, String, String)> = Vec::new();
+
+        for msg in &user_messages {
+            history.push((msg.created_at.clone(), msg.role.clone(), msg.content.clone()));
+        }
+
+        for run in &agent_runs {
+            if let Some(output) = &run.output {
+                let created = run.completed_at.as_deref().unwrap_or(&run.created_at);
+                history.push((created.to_string(), "assistant".to_string(), output.clone()));
+            }
+        }
+
+        history.sort_by(|a, b| a.0.cmp(&b.0));
+
+        // Sliding window: take only the most recent N pairs
+        let window_start = if history.len() > MAX_HISTORY_PAIRS * 2 {
+            history.len() - MAX_HISTORY_PAIRS * 2
+        } else {
+            0
+        };
+        let windowed = &history[window_start..];
+
+        // Convert to ConversationMessages with smart truncation + token budget
+        let mut conversation: Vec<ConversationMessage> = Vec::new();
+        let mut total_chars: usize = 0;
+
+        for (_, role, content) in windowed {
+            if total_chars >= MAX_TOTAL_CHARS {
+                break;
+            }
+
+            let cleaned = if role == "assistant" {
+                // Strip html:preview code blocks — they're huge and not useful for context
+                strip_preview_blocks(content)
+            } else {
+                content.clone()
+            };
+
+            let max_len = if role == "user" {
+                MAX_USER_MSG_CHARS
+            } else {
+                MAX_ASSISTANT_MSG_CHARS
+            };
+
+            let truncated = if cleaned.len() > max_len {
+                // Truncate at word boundary
+                let cut = &cleaned[..max_len];
+                let last_space = cut.rfind(' ').unwrap_or(max_len);
+                format!("{}… [truncated]", &cleaned[..last_space])
+            } else {
+                cleaned
+            };
+
+            total_chars += truncated.len();
+
+            if role == "user" {
+                conversation.push(ConversationMessage::user(&truncated));
+            } else {
+                conversation.push(ConversationMessage::assistant(truncated, Vec::new()));
+            }
+        }
+
+        Ok(conversation)
+    }
+
     async fn execute_agent<S: TokenSink + Sync>(
         &self,
         agent_run_id: &str,
-        session_id: &str,
-        agent_type: &str,
-        task: &str,
-        project_path: &str,
-        provider_id: Option<&str>,
-        model_id: Option<&str>,
+        ctx: &InternalRunContext<'_>,
         token_sink: &S,
     ) -> AppResult<String> {
-        let system_prompt = get_prompt(agent_type).ok_or_else(|| {
-            AppError::Validation(format!("Unknown agent type for prompt lookup: {agent_type}"))
+        let system_prompt = get_prompt(ctx.agent_type).ok_or_else(|| {
+            AppError::Validation(format!("Unknown agent type for prompt lookup: {}", ctx.agent_type))
         })?;
 
-        let provider = provider_service::get_provider_for_chat(&self.db, provider_id).await?;
-        let model = model_id.unwrap_or(&provider.model);
-        let tool_executor = ToolExecutor::new(PathBuf::from(project_path));
+        let provider = provider_service::get_provider_for_chat(&self.db, ctx.provider_id).await?;
 
-        let mut messages = vec![
-            ConversationMessage::system(&format!("{}\n\n{}", system_prompt, LANGUAGE_GUARD)),
-            ConversationMessage::user(task),
-        ];
+        // Pre-flight: check API key is configured (except for local providers like Ollama)
+        if provider.provider_type != "ollama"
+            && provider
+                .api_key
+                .as_deref()
+                .is_none_or(|k| k.trim().is_empty())
+        {
+            return Err(AppError::Validation(format!(
+                "API key not configured for '{}'. Go to Settings → Providers and enter your API key.",
+                provider.name
+            )));
+        }
+
+        let model = ctx.model_id.unwrap_or(&provider.model);
+        let tool_executor = ToolExecutor::new(PathBuf::from(ctx.project_path));
+
+        let system_content = if ctx.flux_enabled {
+            format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_GUIDE)
+        } else {
+            format!("{}\n\n{}", system_prompt, LANGUAGE_GUARD)
+        };
+
+        // Load conversation history for context
+        let history = self.load_conversation_history(ctx.session_id).await?;
+
+        // Build messages: system + history (excluding last user msg) + current task
+        let mut messages = vec![ConversationMessage::system(&system_content)];
+
+        // Add history but skip the last user message (it's the current task we're about to add)
+        if history.len() > 1 {
+            let history_without_last = &history[..history.len() - 1];
+            messages.extend_from_slice(history_without_last);
+        }
+
+        messages.push(ConversationMessage::user(ctx.task));
 
         let mut output = self
             .run_react_loop(
                 &provider,
                 model,
                 agent_run_id,
-                agent_type,
-                project_path,
+                ctx.agent_type,
+                ctx.project_path,
                 &tool_executor,
                 &mut messages,
                 MAX_REACT_ITERATIONS,
@@ -335,55 +620,56 @@ impl AgentRunner {
             )
             .await?;
 
-        if matches!(agent_type, "orchestrator" | "planner") {
+        if matches!(ctx.agent_type, "orchestrator" | "planner") {
             let subagent_tasks = parse_subagent_tasks(&output);
             if !subagent_tasks.is_empty() {
                 let parent_id = agent_run_id.to_string();
-                let provider_id_owned = provider_id.map(std::string::ToString::to_string);
-                let model_id_owned = model_id.map(std::string::ToString::to_string);
-                let mut join_set = JoinSet::new();
+                let provider_id_owned = ctx.provider_id.map(std::string::ToString::to_string);
+                let model_id_owned = ctx.model_id.map(std::string::ToString::to_string);
+                
+                let mut futures = FuturesUnordered::new();
 
                 for subagent in subagent_tasks {
-                    let runner = self.clone();
-                    let session_id_owned = session_id.to_string();
-                    let project_path_owned = project_path.to_string();
+                    let session_id_owned = ctx.session_id.to_string();
+                    let project_path_owned = ctx.project_path.to_string();
                     let parent_id_owned = parent_id.clone();
                     let provider_id_owned = provider_id_owned.clone();
                     let model_id_owned = model_id_owned.clone();
+                    let agent_type_owned = subagent.agent_type.clone();
+                    let task_owned = subagent.task.clone();
 
-                    join_set.spawn(async move {
-                        let result = runner
-                            .run_subagent(
-                                &session_id_owned,
-                                &subagent.agent_type,
-                                &subagent.task,
-                                &project_path_owned,
-                                provider_id_owned.as_deref(),
-                                model_id_owned.as_deref(),
-                                &parent_id_owned,
-                            )
-                            .await;
+                    let future = async move {
+                        let params = SubagentParams {
+                            session_id: session_id_owned,
+                            agent_type: agent_type_owned.clone(),
+                            task: task_owned.clone(),
+                            project_path: project_path_owned,
+                            provider_id: provider_id_owned,
+                            model_id: model_id_owned,
+                            parent_agent_run_id: parent_id_owned,
+                            flux_enabled: ctx.flux_enabled,
+                        };
+                        let result = self.run_subagent_internal(params).await;
 
-                        (subagent.agent_type, subagent.task, result)
-                    });
+                        (agent_type_owned, task_owned, result)
+                    };
+                    
+                    futures.push(future);
                 }
 
                 let mut reports = Vec::new();
-                while let Some(join_result) = join_set.join_next().await {
-                    match join_result {
-                        Ok((sub_type, sub_task, Ok(sub_output))) => {
+                while let Some((sub_type, sub_task, result)) = futures.next().await {
+                    match result {
+                        Ok(sub_output) => {
                             reports.push(format!(
                                 "subagent={sub_type}\ntask={sub_task}\nresult:\n{sub_output}"
                             ));
                         }
-                        Ok((sub_type, sub_task, Err(error))) => {
+                        Err(error) => {
                             reports.push(format!(
                                 "subagent={sub_type}\ntask={sub_task}\nerror:\n{}",
                                 error
                             ));
-                        }
-                        Err(join_error) => {
-                            reports.push(format!("subagent_join_error:\n{}", join_error));
                         }
                     }
                 }
@@ -401,8 +687,8 @@ impl AgentRunner {
                             &provider,
                             model,
                             agent_run_id,
-                            agent_type,
-                            project_path,
+                            ctx.agent_type,
+                            ctx.project_path,
                             &tool_executor,
                             &mut messages,
                             SYNTHESIS_REACT_ITERATIONS,
@@ -420,35 +706,43 @@ impl AgentRunner {
         Ok(output)
     }
 
+    #[allow(dead_code)]
     async fn execute_agent_leaf<S: TokenSink + Sync>(
         &self,
         agent_run_id: &str,
-        agent_type: &str,
-        task: &str,
-        project_path: &str,
-        provider_id: Option<&str>,
-        model_id: Option<&str>,
+        ctx: &InternalRunContext<'_>,
         token_sink: &S,
     ) -> AppResult<String> {
-        let system_prompt = get_prompt(agent_type).ok_or_else(|| {
-            AppError::Validation(format!("Unknown agent type for prompt lookup: {agent_type}"))
+        let system_prompt = get_prompt(ctx.agent_type).ok_or_else(|| {
+            AppError::Validation(format!("Unknown agent type for prompt lookup: {}", ctx.agent_type))
         })?;
 
-        let provider = provider_service::get_provider_for_chat(&self.db, provider_id).await?;
-        let model = model_id.unwrap_or(&provider.model);
-        let tool_executor = ToolExecutor::new(PathBuf::from(project_path));
+        let provider = provider_service::get_provider_for_chat(&self.db, ctx.provider_id).await?;
+        let model = ctx.model_id.unwrap_or(&provider.model);
+        let tool_executor = ToolExecutor::new(PathBuf::from(ctx.project_path));
 
-        let mut messages = vec![
-            ConversationMessage::system(&format!("{}\n\n{}", system_prompt, LANGUAGE_GUARD)),
-            ConversationMessage::user(task),
-        ];
+        let system_content = if ctx.flux_enabled {
+            format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_GUIDE)
+        } else {
+            format!("{}\n\n{}", system_prompt, LANGUAGE_GUARD)
+        };
+
+        // Load conversation history for context
+        let history = self.load_conversation_history(ctx.session_id).await?;
+
+        let mut messages = vec![ConversationMessage::system(&system_content)];
+        if history.len() > 1 {
+            let history_without_last = &history[..history.len() - 1];
+            messages.extend_from_slice(history_without_last);
+        }
+        messages.push(ConversationMessage::user(ctx.task));
 
         self.run_react_loop(
             &provider,
             model,
             agent_run_id,
-            agent_type,
-            project_path,
+            ctx.agent_type,
+            ctx.project_path,
             &tool_executor,
             &mut messages,
             MAX_REACT_ITERATIONS,
@@ -473,6 +767,11 @@ impl AgentRunner {
         let mut final_text = String::new();
 
         for _ in 0..max_iterations {
+            // Check cancellation before each iteration
+            if self.cancel_token.is_cancelled() {
+                return Err(AppError::Cancelled);
+            }
+
             let turn = if provider.provider_type == "anthropic" {
                 self.send_anthropic_with_tools(
                     &provider.api_key,
@@ -505,6 +804,11 @@ impl AgentRunner {
             }
 
             for tool_call in turn.tool_calls {
+                // Check cancellation before each tool execution
+                if self.cancel_token.is_cancelled() {
+                    return Err(AppError::Cancelled);
+                }
+
                 let execution = self
                     .execute_tool_call(
                         agent_run_id,
@@ -562,12 +866,79 @@ impl AgentRunner {
             },
         );
 
-        self.emit_permission_request_if_needed(
+        // Check if permission is needed and wait for approval
+        let permission_rx = self.emit_permission_request_if_needed(
             agent_run_id,
             agent_type,
             executor,
             tool_call,
         );
+
+        if let Some(rx) = permission_rx {
+            // Wait for permission with 60 second timeout
+            match tokio::time::timeout(Duration::from_secs(60), rx).await {
+                Ok(Ok(true)) => {
+                    // Permission granted, continue
+                }
+                Ok(Ok(false)) => {
+                    // Permission denied
+                    let error_msg = "Permission denied by user";
+                    sqlx::query(
+                        "UPDATE tool_calls SET status = ?1, output = ?2, error = ?3, completed_at = ?4 WHERE id = ?5",
+                    )
+                    .bind("failed")
+                    .bind(error_msg)
+                    .bind(error_msg)
+                    .bind(now_rfc3339())
+                    .bind(tool_call_id)
+                    .execute(&self.db)
+                    .await?;
+
+                    return Ok(ToolExecutionOutcome {
+                        output: error_msg.to_string(),
+                        is_error: true,
+                    });
+                }
+                Ok(Err(_)) => {
+                    // Channel closed
+                    let error_msg = "Permission request cancelled";
+                    sqlx::query(
+                        "UPDATE tool_calls SET status = ?1, output = ?2, error = ?3, completed_at = ?4 WHERE id = ?5",
+                    )
+                    .bind("failed")
+                    .bind(error_msg)
+                    .bind(error_msg)
+                    .bind(now_rfc3339())
+                    .bind(tool_call_id)
+                    .execute(&self.db)
+                    .await?;
+
+                    return Ok(ToolExecutionOutcome {
+                        output: error_msg.to_string(),
+                        is_error: true,
+                    });
+                }
+                Err(_) => {
+                    // Timeout
+                    let error_msg = "Permission request timed out after 60 seconds";
+                    sqlx::query(
+                        "UPDATE tool_calls SET status = ?1, output = ?2, error = ?3, completed_at = ?4 WHERE id = ?5",
+                    )
+                    .bind("failed")
+                    .bind(error_msg)
+                    .bind(error_msg)
+                    .bind(now_rfc3339())
+                    .bind(tool_call_id)
+                    .execute(&self.db)
+                    .await?;
+
+                    return Ok(ToolExecutionOutcome {
+                        output: error_msg.to_string(),
+                        is_error: true,
+                    });
+                }
+            }
+        }
 
         let execution = if let Some(tool_name) = map_tool_name(&tool_call.name) {
             let result = executor
@@ -630,15 +1001,12 @@ impl AgentRunner {
         agent_type: &str,
         executor: &ToolExecutor,
         tool_call: &ParsedToolCall,
-    ) {
-        let Some(path) = tool_call
+    ) -> Option<oneshot::Receiver<bool>> {
+        let path = tool_call
             .input
             .get("path")
             .and_then(Value::as_str)
-            .map(std::string::ToString::to_string)
-        else {
-            return;
-        };
+            .map(std::string::ToString::to_string)?;
 
         if executor.requires_permission(&path) {
             let display_path = if PathBuf::from(&path).is_absolute() {
@@ -646,6 +1014,9 @@ impl AgentRunner {
             } else {
                 executor.sandbox.join(&path).to_string_lossy().to_string()
             };
+            
+            let rx = self.permissions.register(agent_run_id.to_string());
+            
             let _ = self.app_handle.emit(
                 "agent-permission-request",
                 AgentPermissionRequestEvent {
@@ -655,7 +1026,7 @@ impl AgentRunner {
                     agent_type: agent_type.to_string(),
                 },
             );
-            return;
+            return Some(rx);
         }
 
         if executor.is_outside_sandbox(&path) {
@@ -664,6 +1035,9 @@ impl AgentRunner {
             } else {
                 executor.sandbox.join(path).to_string_lossy().to_string()
             };
+            
+            let rx = self.permissions.register(agent_run_id.to_string());
+            
             let _ = self.app_handle.emit(
                 "agent-permission-request",
                 AgentPermissionRequestEvent {
@@ -673,7 +1047,10 @@ impl AgentRunner {
                     agent_type: agent_type.to_string(),
                 },
             );
+            return Some(rx);
         }
+        
+        None
     }
 
     async fn send_openai_compatible_with_tools<S: TokenSink + Sync>(
@@ -1170,6 +1547,143 @@ impl ConversationMessage {
     }
 }
 
+/// Compress ```html:preview code blocks in conversation history.
+/// Instead of sending the full 5-10KB HTML, extract a compact text summary
+/// that preserves the widget's content/data so the AI can make targeted edits.
+fn strip_preview_blocks(text: &str) -> String {
+    let mut result = String::with_capacity(text.len());
+    let mut in_preview = false;
+    let mut preview_content = String::new();
+
+    for line in text.lines() {
+        let trimmed = line.trim();
+        if !in_preview
+            && trimmed.starts_with("```")
+            && (trimmed.contains("html:preview")
+                || trimmed.contains("html:artifact")
+                || trimmed.contains("html:viz")
+                || trimmed.contains("html:render"))
+        {
+            in_preview = true;
+            preview_content.clear();
+            continue;
+        }
+        if in_preview {
+            if trimmed == "```" {
+                in_preview = false;
+                // Extract a compact summary from the HTML
+                let summary = summarize_html_widget(&preview_content);
+                result.push_str(&format!("[enowX Flux widget: {}]\n", summary));
+            } else {
+                preview_content.push_str(line);
+                preview_content.push('\n');
+            }
+            continue;
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    result.trim().to_string()
+}
+
+/// Extract a compact text summary from HTML widget content.
+/// Keeps: text content, data values, labels, chart config hints.
+/// Removes: HTML tags, CSS, boilerplate.
+fn summarize_html_widget(html: &str) -> String {
+    let mut summary = String::new();
+
+    // Extract title if present
+    if let Some(cap) = regex::Regex::new(r"<title>([^<]+)</title>")
+        .ok()
+        .and_then(|re| re.captures(html))
+    {
+        summary.push_str(&format!("title: {}. ", &cap[1]));
+    }
+
+    // Extract visible text from key elements (h1-h3, labels, spans with data)
+    let text_re = regex::Regex::new(
+        r"<(?:h[1-3]|label|th|td)[^>]*>([^<]{1,100})<"
+    ).ok();
+    if let Some(re) = text_re {
+        let mut texts: Vec<&str> = Vec::new();
+        for cap in re.captures_iter(html) {
+            let t = cap.get(1).map_or("", |m| m.as_str()).trim();
+            if !t.is_empty() && !texts.contains(&t) {
+                texts.push(t);
+            }
+        }
+        if !texts.is_empty() {
+            summary.push_str(&format!("content: {}. ", texts.join(", ")));
+        }
+    }
+
+    // Extract Chart.js datasets info
+    if html.contains("Chart(") || html.contains("chart.js") || html.contains("Chart.js") {
+        // Try to find labels and dataset labels
+        let labels_re = regex::Regex::new(r"labels:\s*\[([^\]]{1,300})\]").ok();
+        let dataset_re = regex::Regex::new(r#"label:\s*['"]([^'"]{1,50})['"]"#).ok();
+        let data_re = regex::Regex::new(r"data:\s*\[([^\]]{1,300})\]").ok();
+        let bg_re = regex::Regex::new(r#"backgroundColor:\s*['"]([^'"]{1,30})['"]"#).ok();
+
+        if let Some(re) = labels_re {
+            if let Some(cap) = re.captures(html) {
+                summary.push_str(&format!("chart labels: [{}]. ", &cap[1]));
+            }
+        }
+        if let Some(re) = dataset_re {
+            let names: Vec<&str> = re.captures_iter(html).filter_map(|c| c.get(1).map(|m| m.as_str())).collect();
+            if !names.is_empty() {
+                summary.push_str(&format!("datasets: {}. ", names.join(", ")));
+            }
+        }
+        if let Some(re) = data_re {
+            for (i, cap) in re.captures_iter(html).enumerate() {
+                if i < 3 {
+                    summary.push_str(&format!("data[{}]: [{}]. ", i, &cap[1]));
+                }
+            }
+        }
+        if let Some(re) = bg_re {
+            let colors: Vec<&str> = re.captures_iter(html).filter_map(|c| c.get(1).map(|m| m.as_str())).collect();
+            if !colors.is_empty() {
+                summary.push_str(&format!("colors: {}. ", colors.join(", ")));
+            }
+        }
+    }
+
+    // Extract metric card values
+    let metric_re = regex::Regex::new(r"metric-value[^>]*>([^<]{1,50})<").ok();
+    if let Some(re) = metric_re {
+        let vals: Vec<&str> = re.captures_iter(html).filter_map(|c| c.get(1).map(|m| m.as_str().trim())).collect();
+        if !vals.is_empty() {
+            summary.push_str(&format!("metrics: {}. ", vals.join(", ")));
+        }
+    }
+
+    if summary.is_empty() {
+        // Fallback: extract all visible text (strip tags)
+        let stripped = regex::Regex::new(r"<[^>]+>")
+            .ok()
+            .map(|re| re.replace_all(html, " ").to_string())
+            .unwrap_or_default();
+        let clean: String = stripped.split_whitespace().take(50).collect::<Vec<&str>>().join(" ");
+        if !clean.is_empty() {
+            summary.push_str(&clean);
+        } else {
+            summary.push_str("interactive visual widget");
+        }
+    }
+
+    // Cap summary length
+    if summary.len() > 500 {
+        summary.truncate(500);
+        summary.push('…');
+    }
+
+    summary
+}
+
 fn finalize_llm_turn(
     output: String,
     pending_calls: HashMap<usize, StreamingToolCall>,
@@ -1259,10 +1773,8 @@ fn to_anthropic_messages(messages: &[ConversationMessage]) -> AppResult<(Option<
 
     for message in messages {
         match message.role.as_str() {
-            "system" => {
-                if system.is_none() {
-                    system = Some(message.content.clone());
-                }
+            "system" if system.is_none() => {
+                system = Some(message.content.clone());
             }
             "assistant" => {
                 let mut blocks = Vec::new();

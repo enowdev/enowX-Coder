@@ -24,18 +24,18 @@ export const SettingsModal: React.FC = () => {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--overlay)] backdrop-blur-sm"
       onClick={() => setSettingsOpen(false)}
     >
       <div
-        className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full max-w-6xl h-[64vh] flex flex-col overflow-hidden shadow-2xl shadow-black/50"
+        className="bg-[var(--surface)] border border-[var(--border)] rounded-2xl w-full max-w-6xl h-[64vh] flex flex-col overflow-hidden shadow-2xl shadow-[var(--shadow)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-5 pt-5 pb-1">
           <h2 className="text-sm font-bold text-[var(--text)]">Settings</h2>
           <button
             onClick={() => setSettingsOpen(false)}
-            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover-bg)] transition-colors"
           >
             <X size={16} />
           </button>
@@ -47,8 +47,8 @@ export const SettingsModal: React.FC = () => {
             className={cn(
               "px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2",
               activeTab === 'providers'
-                ? "text-white border-white bg-white/5"
-                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-white/5"
+                ? "text-[var(--text)] border-[var(--accent)] bg-[var(--hover-bg)]"
+                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-[var(--hover-bg)]"
             )}
           >
             <Robot size={14} weight={activeTab === 'providers' ? "fill" : "regular"} />
@@ -59,8 +59,8 @@ export const SettingsModal: React.FC = () => {
             className={cn(
               "px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2",
               activeTab === 'agents'
-                ? "text-white border-white bg-white/5"
-                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-white/5"
+                ? "text-[var(--text)] border-[var(--accent)] bg-[var(--hover-bg)]"
+                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-[var(--hover-bg)]"
             )}
           >
             <Robot size={14} weight={activeTab === 'agents' ? "fill" : "regular"} />
@@ -71,8 +71,8 @@ export const SettingsModal: React.FC = () => {
             className={cn(
               "px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2",
               activeTab === 'tools'
-                ? "text-white border-white bg-white/5"
-                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-white/5"
+                ? "text-[var(--text)] border-[var(--accent)] bg-[var(--hover-bg)]"
+                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-[var(--hover-bg)]"
             )}
           >
             <Wrench size={14} weight={activeTab === 'tools' ? "fill" : "regular"} />
@@ -83,8 +83,8 @@ export const SettingsModal: React.FC = () => {
             className={cn(
               "px-3 py-2 text-xs font-semibold rounded-t-lg transition-colors border-b-2 -mb-px flex items-center gap-2",
               activeTab === 'system'
-                ? "text-white border-white bg-white/5"
-                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-white/5"
+                ? "text-[var(--text)] border-[var(--accent)] bg-[var(--hover-bg)]"
+                : "text-[var(--text-muted)] border-transparent hover:text-[var(--text)] hover:bg-[var(--hover-bg)]"
             )}
           >
             <GearSix size={14} weight={activeTab === 'system' ? "fill" : "regular"} />

@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Paperclip, ArrowUp } from '@phosphor-icons/react';
+import { Paperclip, ArrowUp, Stop } from '@phosphor-icons/react';
 import {
   Select,
   SelectContent,
@@ -10,20 +10,25 @@ import {
 } from '@/components/ui/select';
 import { useChatStore } from '@/stores/useChatStore';
 import { useSettingsStore } from '@/stores/useSettingsStore';
-import { useSessionStore } from '@/stores/useSessionStore';
 import { useAgentStore } from '@/stores/useAgentStore';
 import { ProviderModelConfig, SELECTABLE_AGENTS, AGENT_LABELS } from '@/types';
 import { cn } from '@/lib/utils';
 
+export interface ChatInputBarHandle {
+  prefill: (text: string) => void;
+}
+
 interface ChatInputBarProps {
   onSend: (content: string) => void;
+  onStop?: () => void;
 }
 
 const MAX_HEIGHT = 200;
 
-export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
+export const ChatInputBar = React.forwardRef<ChatInputBarHandle, ChatInputBarProps>(({ onSend, onStop }, ref) => {
   const { isStreaming } = useChatStore();
-  const activeSessionId = useSessionStore((s) => s.activeSessionId);
+  const hasRunningAgent = useAgentStore((s) => s.agentRuns.some((r) => r.status === 'running'));
+  const isGenerating = isStreaming || hasRunningAgent;
   const { selectedAgentType, setSelectedAgentType } = useAgentStore();
   const { providers, defaultProviderId, selectedModelId, setDefaultProviderId, setSelectedModelId } =
     useSettingsStore();
@@ -31,6 +36,22 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
   const [value, setValue] = useState('');
   const [enabledModels, setEnabledModels] = useState<ProviderModelConfig[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  React.useImperativeHandle(ref, () => ({
+    prefill: (text: string) => {
+      setValue(text);
+      // Focus the textarea after prefill
+      setTimeout(() => textareaRef.current?.focus(), 50);
+    },
+  }));
+
+  // Auto-select provider if only one enabled and none selected
+  useEffect(() => {
+    const enabled = providers.filter(p => p.isEnabled);
+    if (!defaultProviderId && enabled.length > 0) {
+      setDefaultProviderId(enabled[0].id);
+    }
+  }, [providers, defaultProviderId, setDefaultProviderId]);
 
   // Load enabled models whenever the selected provider changes
   useEffect(() => {
@@ -43,11 +64,30 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
     invoke<ProviderModelConfig[]>('list_provider_models', { providerId: defaultProviderId })
       .then((models) => {
         const enabled = models.filter((m) => m.enabled);
-        setEnabledModels(enabled);
-        // Auto-select first enabled model if current selection is invalid
-        const stillValid = enabled.some((m) => m.modelId === selectedModelId);
-        if (!stillValid) {
-          setSelectedModelId(enabled[0]?.modelId ?? null);
+        if (enabled.length > 0) {
+          setEnabledModels(enabled);
+          const stillValid = enabled.some((m) => m.modelId === selectedModelId);
+          if (!stillValid) {
+            setSelectedModelId(enabled[0]?.modelId ?? null);
+          }
+        } else {
+          // No models explicitly enabled — fetch all available models as fallback
+          invoke<string[]>('list_models', { providerId: defaultProviderId })
+            .then((allModels) => {
+              const asFake = allModels.map((id) => ({ modelId: id, enabled: true, providerId: defaultProviderId!, id: id, maxTokens: 4096, temperature: 0.7, createdAt: '', updatedAt: '' }));
+              setEnabledModels(asFake);
+              if (!allModels.includes(selectedModelId ?? '')) {
+                setSelectedModelId(allModels[0] ?? null);
+              }
+            })
+            .catch(() => {
+              // Last resort: use provider's default model
+              const prov = providers.find(p => p.id === defaultProviderId);
+              if (prov?.model) {
+                setEnabledModels([{ modelId: prov.model, enabled: true, providerId: prov.id, id: prov.model, maxTokens: 4096, temperature: 0.7, createdAt: '', updatedAt: '' }]);
+                setSelectedModelId(prov.model);
+              }
+            });
         }
       })
       .catch(() => {
@@ -70,13 +110,13 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
 
   const handleSend = useCallback(() => {
     const trimmed = value.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed || isGenerating) return;
     onSend(trimmed);
     setValue('');
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
-  }, [value, isStreaming, onSend]);
+  }, [value, isGenerating, onSend]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -85,7 +125,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
     }
   };
 
-  const canSend = value.trim().length > 0 && !isStreaming && !!activeSessionId;
+  const canSend = value.trim().length > 0 && !isGenerating;
 
   return (
     <div className="px-4 pb-4 pt-2">
@@ -94,7 +134,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
         className={cn(
           'relative flex flex-col rounded-2xl border transition-all duration-200',
           'bg-[var(--surface-2)] border-[var(--border)]',
-          'focus-within:border-white/15 focus-within:shadow-[0_0_0_3px_rgba(255,255,255,0.06),0_0_20px_rgba(255,255,255,0.04)]'
+          'focus-within:border-[var(--focus-border)] focus-within:shadow-[0_0_0_3px_var(--focus-glow),0_0_20px_var(--focus-glow)]'
         )}
       >
         <textarea
@@ -102,17 +142,15 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          disabled={isStreaming}
-          placeholder={
-            activeSessionId ? 'How can I help you today?' : 'Open a folder to start chatting…'
-          }
+          disabled={isGenerating}
+          placeholder="How can I help you today?"
           rows={1}
           className={cn(
             'w-full resize-none bg-transparent px-4 pt-3 pb-2',
             'text-sm leading-relaxed text-[var(--text)]',
             'placeholder:text-[var(--text-subtle)]',
             'custom-scrollbar',
-            isStreaming && 'opacity-50 cursor-not-allowed'
+            isGenerating && 'opacity-50 cursor-not-allowed'
           )}
           style={{ minHeight: '24px', maxHeight: `${MAX_HEIGHT}px`, outline: 'none' }}
         />
@@ -122,7 +160,7 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
             <Select
               value={selectedAgentType}
               onValueChange={(val: any) => setSelectedAgentType(val)}
-              disabled={isStreaming || !activeSessionId}
+              disabled={isGenerating}
             >
               <SelectTrigger className="h-7 text-[11px] max-w-[120px] bg-[var(--surface-3)] border-[var(--border)]">
                 <SelectValue placeholder="Agent" />
@@ -138,10 +176,10 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
 
             <button
               type="button"
-              disabled={isStreaming || !activeSessionId}
+              disabled={isGenerating}
               className={cn(
                 'flex items-center justify-center w-8 h-8 rounded-lg transition-colors',
-                'text-[var(--text-subtle)] hover:text-[var(--text-muted)] hover:bg-white/5',
+                'text-[var(--text-subtle)] hover:text-[var(--text-muted)] hover:bg-[var(--hover-bg)]',
                 'disabled:opacity-30 disabled:cursor-not-allowed'
               )}
               title="Attach file"
@@ -152,59 +190,61 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
 
           <div className="flex items-center gap-2">
             {/* Provider selector */}
-            {providers.length > 0 && (
-              <Select
-                value={defaultProviderId ?? undefined}
-                onValueChange={setDefaultProviderId}
-                disabled={isStreaming}
-              >
+            {providers.filter((p) => p.isEnabled).length > 0 && (
+              <Select value={defaultProviderId ?? undefined} onValueChange={setDefaultProviderId} disabled={isGenerating}>
                 <SelectTrigger className="h-7 text-[11px] max-w-[120px]">
                   <SelectValue placeholder="Provider" />
                 </SelectTrigger>
                 <SelectContent side="top" align="end">
-                  {providers.map((p) => (
-                    <SelectItem key={p.id} value={p.id}>
-                      {p.name}
-                    </SelectItem>
+                  {providers.filter((p) => p.isEnabled).map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
 
-            {/* Model selector — only shown when there are enabled models */}
+            {/* Model selector */}
             {enabledModels.length > 0 && (
-              <Select
-                value={selectedModelId ?? undefined}
-                onValueChange={setSelectedModelId}
-                disabled={isStreaming}
-              >
+              <Select value={selectedModelId ?? undefined} onValueChange={setSelectedModelId} disabled={isGenerating}>
                 <SelectTrigger className="h-7 text-[11px] max-w-[160px]">
                   <SelectValue placeholder="Model" />
                 </SelectTrigger>
                 <SelectContent side="top" align="end">
                   {enabledModels.map((m) => (
-                    <SelectItem key={m.modelId} value={m.modelId}>
-                      {m.modelId}
-                    </SelectItem>
+                    <SelectItem key={m.modelId} value={m.modelId}>{m.modelId}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             )}
 
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!canSend}
-              className={cn(
-                'flex items-center justify-center w-8 h-8 rounded-lg transition-all',
-                canSend
-                  ? 'bg-white text-black hover:bg-[#e5e5e5] active:scale-95'
-                  : 'bg-[var(--surface-3)] text-[var(--text-subtle)] cursor-not-allowed'
-              )}
-              title="Send (Enter)"
-            >
-              <ArrowUp size={16} weight="bold" />
-            </button>
+            {isGenerating ? (
+              <button
+                type="button"
+                onClick={onStop}
+                className={cn(
+                  'flex items-center justify-center w-8 h-8 rounded-lg transition-all',
+                  'bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] active:scale-95',
+                )}
+                title="Stop generating"
+              >
+                <Stop size={16} weight="fill" />
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!canSend}
+                className={cn(
+                  'flex items-center justify-center w-8 h-8 rounded-lg transition-all',
+                  canSend
+                    ? 'bg-[var(--accent)] text-[var(--accent-fg)] hover:bg-[var(--accent-hover)] active:scale-95'
+                    : 'bg-[var(--surface-3)] text-[var(--text-subtle)] cursor-not-allowed'
+                )}
+                title="Send (Enter)"
+              >
+                <ArrowUp size={16} weight="bold" />
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -215,4 +255,6 @@ export const ChatInputBar: React.FC<ChatInputBarProps> = ({ onSend }) => {
       </div>
     </div>
   );
-};
+});
+
+ChatInputBar.displayName = 'ChatInputBar';

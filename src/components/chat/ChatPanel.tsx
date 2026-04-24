@@ -1,64 +1,109 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Dot, Sparkle } from '@phosphor-icons/react';
+import React, { useEffect, useRef, useCallback } from 'react';
+import { Sparkle, PencilLine, GraduationCap, Code, Briefcase, Lightning } from '@phosphor-icons/react';
 import { useChatStore } from '@/stores/useChatStore';
 import { useAgentStore } from '@/stores/useAgentStore';
 import { ChatMessage } from './ChatMessage';
 import { StreamingMessage } from './StreamingMessage';
 import { AgentRunCard } from './AgentRunCard';
 import { Message, AgentRunWithTools } from '@/types';
-import { TimelineEvent } from './TimelineEvent';
+import { cn } from '@/lib/utils';
 
-export const ChatPanel: React.FC = () => {
+interface ChatPanelProps {
+  onChipClick?: (text: string) => void;
+}
+
+const QUICK_CHIPS = [
+  { icon: PencilLine, label: 'Write', prompt: 'Help me write ' },
+  { icon: GraduationCap, label: 'Learn', prompt: 'Explain how ' },
+  { icon: Code, label: 'Code', prompt: 'Write code to ' },
+  { icon: Briefcase, label: 'Personal', prompt: 'Help me with ' },
+  { icon: Lightning, label: 'Brainstorm', prompt: 'Brainstorm ideas for ' },
+];
+
+export const ChatPanel: React.FC<ChatPanelProps> = ({ onChipClick }) => {
   const { messages, isStreaming, streamingText } = useChatStore();
   const { agentRuns } = useAgentStore();
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const [atBottom, setAtBottom] = useState(true);
   const userScrolledUp = useRef(false);
+  const isAutoScrolling = useRef(false);
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    bottomRef.current?.scrollIntoView({ behavior });
-  }, []);
-
-  const checkAtBottom = useCallback(() => {
+  const scrollToBottom = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
-    const threshold = 40;
-    const isAtBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - threshold;
-    setAtBottom(isAtBottom);
-    userScrolledUp.current = !isAtBottom;
+    isAutoScrolling.current = true;
+    requestAnimationFrame(() => {
+      if (!el) return;
+      el.scrollTop = el.scrollHeight;
+      // Reset flag after browser has applied the scroll
+      requestAnimationFrame(() => { isAutoScrolling.current = false; });
+    });
   }, []);
 
-  useEffect(() => {
-    if (!userScrolledUp.current) {
-      scrollToBottom('smooth');
-    }
-  }, [messages, agentRuns, scrollToBottom]);
+  // Track user scroll intent — ignore scroll events caused by our own scrollToBottom
+  const handleScroll = useCallback(() => {
+    if (isAutoScrolling.current) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    userScrolledUp.current = distFromBottom > 150;
+  }, []);
+
+  // Auto-scroll only when genuinely new messages are added
+  const prevMsgCount = useRef(messages.length);
 
   useEffect(() => {
-    const hasRunningAgent = agentRuns.some((run) => run.status === 'running');
-    if ((isStreaming || hasRunningAgent) && !userScrolledUp.current) {
-      scrollToBottom('instant');
+    const newMsg = messages.length > prevMsgCount.current;
+    prevMsgCount.current = messages.length;
+
+    if (newMsg && !userScrolledUp.current) {
+      scrollToBottom();
     }
-  }, [streamingText, isStreaming, agentRuns, scrollToBottom]);
+  }, [messages.length, scrollToBottom]);
+
+  // During active streaming only, follow new tokens (throttled)
+  const streamScrollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!isStreaming) {
-      userScrolledUp.current = false;
-      scrollToBottom('smooth');
-    }
-  }, [isStreaming, scrollToBottom]);
+    if (!isStreaming || userScrolledUp.current) return;
+    if (streamScrollTimer.current) return; // throttle
+    streamScrollTimer.current = setTimeout(() => {
+      streamScrollTimer.current = null;
+      if (!userScrolledUp.current) scrollToBottom();
+    }, 80);
+  }, [streamingText, isStreaming, scrollToBottom]);
 
-  if (messages.length === 0 && agentRuns.length === 0 && !isStreaming) {
+  const isEmpty = messages.length === 0 && agentRuns.length === 0 && !isStreaming;
+
+  if (isEmpty) {
     return (
-      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 opacity-60">
-        <div className="w-16 h-16 rounded-2xl bg-[var(--surface-2)] border border-[var(--border)] mb-4 flex items-center justify-center">
-          <Sparkle size={28} weight="duotone" className="text-[var(--accent)]" />
+      <div className="flex-1 flex flex-col items-center pt-[12vh] text-center p-8">
+        <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[var(--surface-2)] to-[var(--surface-3)] border border-[var(--border)] mb-6 flex items-center justify-center">
+          <Sparkle size={26} weight="duotone" className="text-[var(--accent)]" />
         </div>
-        <h2 className="text-lg font-bold mb-2">How can I help you today?</h2>
-        <p className="text-sm text-[var(--text-muted)] max-w-sm">
-          Start a conversation. I can help you write code, debug issues, and build your project.
+        <h2 className="text-2xl font-bold mb-2 tracking-tight">Welcome Back!</h2>
+        <p className="text-sm text-[var(--text-muted)] mb-8 max-w-sm">
+          What would you like to work on today?
         </p>
+
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {QUICK_CHIPS.map((chip) => (
+            <button
+              key={chip.label}
+              onClick={() => onChipClick?.(chip.prompt)}
+              className={cn(
+                'flex items-center gap-2 px-4 py-2 rounded-full',
+                'border border-[var(--border)] bg-[var(--surface-2)]/50',
+                'text-xs text-[var(--text-muted)] font-medium',
+                'hover:bg-[var(--hover-bg-strong)] hover:text-[var(--text)] hover:border-[var(--border-strong)]',
+                'transition-all duration-200 active:scale-95'
+              )}
+            >
+              <chip.icon size={14} weight="duotone" />
+              {chip.label}
+            </button>
+          ))}
+        </div>
       </div>
     );
   }
@@ -73,28 +118,15 @@ export const ChatPanel: React.FC = () => {
     <div className="flex-1 relative overflow-hidden min-h-0">
       <div
         ref={scrollRef}
-        onScroll={checkAtBottom}
+        onScroll={handleScroll}
         className="h-full overflow-y-auto custom-scrollbar py-6"
       >
-        <div className="max-w-3xl mx-auto w-full px-4 flex flex-col gap-4">
+        <div className="max-w-3xl mx-auto w-full px-4 flex flex-col gap-6">
           {combinedItems.map((item) => {
             if (item.type === 'message') {
               const message = item.data as Message;
-              if (message.role === 'assistant') {
-                return (
-                  <TimelineEvent
-                    key={message.id}
-                    showConnector={true}
-                    icon={<Dot size={14} weight="fill" className="text-white" />}
-                    contentClassName="pr-1"
-                  >
-                    <ChatMessage message={message} />
-                  </TimelineEvent>
-                );
-              }
               return <ChatMessage key={message.id} message={message} />;
             }
-
             return <AgentRunCard key={item.data.id} run={item.data as AgentRunWithTools} />;
           })}
           <StreamingMessage />
@@ -102,12 +134,10 @@ export const ChatPanel: React.FC = () => {
         </div>
       </div>
 
-      {atBottom && (
-        <div
-          className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
-          style={{ background: 'linear-gradient(to bottom, transparent, var(--bg))' }}
-        />
-      )}
+      <div
+        className="absolute bottom-0 left-0 right-0 h-16 pointer-events-none"
+        style={{ background: 'linear-gradient(to bottom, transparent, var(--bg))' }}
+      />
     </div>
   );
 };

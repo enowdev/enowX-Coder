@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { Robot, Code, ChartBar, TerminalWindow, Cpu, Books } from '@phosphor-icons/react';
+import { Robot, Code, ChartBar, TerminalWindow, Cpu, Books, SidebarSimple } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
+import { useUIStore } from '@/stores/useUIStore';
 
 type Tab = 'agents' | 'skills' | 'metrics';
 
 export const RightSidebar: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('agents');
+  const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
 
   const tabs = [
     { id: 'agents' as Tab, icon: Robot, label: 'Agents' },
@@ -15,7 +17,14 @@ export const RightSidebar: React.FC = () => {
 
   return (
     <aside className="h-full bg-[var(--surface)] border-l border-[var(--border)] flex flex-col w-[var(--sidebar-width-right)]">
-      <div className="flex border-b border-[var(--border)]">
+      <div className="flex items-center border-b border-[var(--border)]">
+        <button
+          onClick={toggleRightSidebar}
+          className="p-2.5 text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--surface-2)] transition-colors shrink-0"
+          title="Hide panel"
+        >
+          <SidebarSimple size={16} weight="fill" className="scale-x-[-1]" />
+        </button>
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -23,14 +32,14 @@ export const RightSidebar: React.FC = () => {
             className={cn(
               "flex-1 flex flex-col items-center gap-1 py-3 transition-all relative group",
               activeTab === tab.id 
-                ? "text-white" 
+                ? "text-[var(--text)]" 
                 : "text-[var(--text-muted)] hover:text-[var(--text)]"
             )}
           >
             <tab.icon size={20} weight={activeTab === tab.id ? "fill" : "regular"} />
             <span className="text-[10px] font-bold uppercase tracking-wider">{tab.label}</span>
             {activeTab === tab.id && (
-              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-white" />
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[var(--accent)]" />
             )}
           </button>
         ))}
@@ -45,7 +54,7 @@ export const RightSidebar: React.FC = () => {
             </h3>
             <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 text-center space-y-2">
               <div className="w-10 h-10 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center mx-auto">
-                <TerminalWindow size={20} weight="duotone" className="text-white" />
+                <TerminalWindow size={20} weight="duotone" className="text-[var(--text)]" />
               </div>
               <p className="text-xs font-medium">No agents running</p>
               <p className="text-[10px] text-[var(--text-muted)]">Spawn an agent from the chat to see progress here.</p>

@@ -9,10 +9,10 @@ interface ToolExecutionBlockProps {
 }
 
 const statusLabel = (status: ToolCall['status']) => {
-  if (status === 'failed') return 'Execute Failed';
-  if (status === 'completed') return 'Result';
-  if (status === 'running') return 'Running';
-  return 'Queued';
+  if (status === 'failed') return 'failed';
+  if (status === 'completed') return 'done';
+  if (status === 'running') return 'running';
+  return 'queued';
 };
 
 export const ToolExecutionBlock: React.FC<ToolExecutionBlockProps> = ({
@@ -23,49 +23,42 @@ export const ToolExecutionBlock: React.FC<ToolExecutionBlockProps> = ({
   const isFailed = tool.status === 'failed';
 
   return (
-    <div
-      className={cn(
-        'rounded-lg border bg-[var(--surface-2)]/60 overflow-hidden',
-        isFailed ? 'border-white/35' : 'border-[var(--border)]'
-      )}
-    >
+    <div>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left"
+        className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors py-1"
       >
-        <div className="flex items-center gap-2">
-          <Terminal size={13} weight="duotone" className="text-[var(--text-muted)]" />
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-muted)]">
-            Executed
-          </span>
-          <span
-            className={cn(
-              'text-[10px] px-1.5 py-0.5 rounded border',
-              isFailed
-                ? 'text-white border-white/40 bg-white/5'
-                : 'text-[var(--text-subtle)] border-[var(--border)] bg-[var(--surface-3)]'
-            )}
-          >
-            {statusLabel(tool.status)}
-          </span>
-        </div>
-        {open ? <CaretDown size={12} /> : <CaretRight size={12} />}
+        {open ? <CaretDown size={10} weight="bold" /> : <CaretRight size={10} weight="bold" />}
+        <Terminal size={12} weight="duotone" />
+        <span className="font-medium font-mono">{tool.toolName}</span>
+        <span
+          className={cn(
+            'text-[10px] px-1.5 py-0.5 rounded-full',
+            isFailed
+              ? 'text-[var(--danger)] bg-[var(--danger-bg)]'
+              : tool.status === 'running'
+                ? 'text-[var(--accent)] bg-[var(--hover-bg)]'
+                : 'text-[var(--text-subtle)] bg-[var(--surface-3)]',
+          )}
+        >
+          {statusLabel(tool.status)}
+        </span>
       </button>
 
       {open && (
-        <div className="px-3 pb-3 space-y-2">
-          <div className="rounded border border-[var(--border)] bg-[var(--surface-3)] p-2 font-mono text-[11px] text-[var(--text)] whitespace-pre-wrap break-all">
+        <div className="ml-5 pl-3 border-l-2 border-[var(--border)] space-y-1.5 mt-1 mb-1">
+          <div className="font-mono text-[11px] text-[var(--text-muted)] whitespace-pre-wrap break-all bg-[var(--surface-2)] rounded-lg px-3 py-2">
             {`> ${tool.toolName} ${tool.input}`}
           </div>
 
           {tool.output && (
-            <div className="rounded border border-[var(--border)] bg-[var(--surface-3)]/70 p-2 font-mono text-[11px] text-[var(--text-muted)] whitespace-pre-wrap break-all">
+            <div className="font-mono text-[11px] text-[var(--text-subtle)] whitespace-pre-wrap break-all bg-[var(--surface-2)] rounded-lg px-3 py-2 max-h-48 overflow-y-auto custom-scrollbar">
               {tool.output}
             </div>
           )}
 
           {isFailed && (
-            <div className="flex items-start gap-1.5 text-[11px] text-white border border-white/35 bg-white/5 rounded p-2">
+            <div className="flex items-start gap-1.5 text-[11px] text-[var(--danger)] bg-[var(--danger-bg)] rounded-lg px-3 py-2">
               <WarningCircle size={13} className="mt-0.5 shrink-0" />
               <span>{tool.error ?? 'Tool execution failed.'}</span>
             </div>

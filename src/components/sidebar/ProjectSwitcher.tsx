@@ -37,14 +37,14 @@ export const ProjectSwitcher: React.FC = () => {
     <button
       onClick={handleOpenFolder}
       disabled={loading}
-      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-white/5 transition-colors text-sm border border-dashed border-[var(--border)] hover:border-[var(--border-strong)] disabled:opacity-50 disabled:cursor-not-allowed"
+      className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[var(--text-muted)] hover:text-[var(--text)] hover:bg-[var(--hover-bg)] transition-colors text-sm border border-dashed border-[var(--border)] hover:border-[var(--border-strong)] disabled:opacity-50 disabled:cursor-not-allowed"
     >
       {loading ? (
         <CircleNotch size={15} className="animate-spin" />
       ) : (
         <FolderOpen size={15} />
       )}
-      <span className="text-xs">{loading ? 'Opening…' : 'Open folder'}</span>
+      <span className="text-[13px]">{loading ? 'Opening…' : 'Open folder'}</span>
     </button>
   );
 };

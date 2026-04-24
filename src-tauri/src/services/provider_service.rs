@@ -9,7 +9,7 @@ use crate::{
 use super::now_rfc3339;
 
 const SELECT_COLS: &str =
-    "id, name, provider_type, base_url, api_key, model, is_default, is_builtin, created_at, updated_at";
+    "id, name, provider_type, base_url, api_key, model, is_default, is_builtin, is_enabled, created_at, updated_at";
 
 pub async fn list_providers(db: &SqlitePool) -> AppResult<Vec<Provider>> {
     let providers = sqlx::query_as::<_, Provider>(&format!(
@@ -64,12 +64,13 @@ pub async fn create_provider(
         model: normalized_model.to_string(),
         is_default: false,
         is_builtin: false,
+        is_enabled: true,
         created_at: now.clone(),
         updated_at: now,
     };
 
     sqlx::query(
-        "INSERT INTO providers (id, name, provider_type, base_url, api_key, model, is_default, is_builtin, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        "INSERT INTO providers (id, name, provider_type, base_url, api_key, model, is_default, is_builtin, is_enabled, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
     )
     .bind(&provider.id)
     .bind(&provider.name)
@@ -79,6 +80,7 @@ pub async fn create_provider(
     .bind(&provider.model)
     .bind(provider.is_default)
     .bind(provider.is_builtin)
+    .bind(provider.is_enabled)
     .bind(&provider.created_at)
     .bind(&provider.updated_at)
     .execute(db)
@@ -208,4 +210,22 @@ pub async fn get_provider_for_chat(
     .await?;
 
     provider.ok_or_else(|| AppError::NotFound("No default provider configured".to_string()))
+}
+
+pub async fn toggle_provider_enabled(db: &SqlitePool, id: &str, enabled: bool) -> AppResult<()> {
+    let now = now_rfc3339();
+    let result = sqlx::query(
+        "UPDATE providers SET is_enabled = ?1, updated_at = ?2 WHERE id = ?3",
+    )
+    .bind(enabled)
+    .bind(&now)
+    .bind(id)
+    .execute(db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        return Err(AppError::NotFound(format!("Provider not found: {id}")));
+    }
+
+    Ok(())
 }

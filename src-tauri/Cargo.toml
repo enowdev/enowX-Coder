@@ -26,6 +26,7 @@ reqwest = { version = "0.12", features = ["json", "stream"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
 futures-util = "0.3"
+tokio-util = "0.7"
 tokio-stream = "0.1"
 anyhow = "1"
 log = "0.4"

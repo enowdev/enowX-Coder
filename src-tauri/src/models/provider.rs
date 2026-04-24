@@ -12,6 +12,7 @@ pub struct Provider {
     pub model: String,
     pub is_default: bool,
     pub is_builtin: bool,
+    pub is_enabled: bool,
     pub created_at: String,
     pub updated_at: String,
 }

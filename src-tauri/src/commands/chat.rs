@@ -21,7 +21,9 @@ pub async fn send_message(
     on_token: Channel<String>,
     app_handle: AppHandle,
 ) -> AppResult<()> {
-    chat_service::send_message(
+    let cancel_token = state.cancellations.register(format!("chat:{session_id}"));
+
+    let result = chat_service::send_message(
         state.pool(),
         &session_id,
         &content,
@@ -29,6 +31,52 @@ pub async fn send_message(
         model_id.as_deref(),
         on_token,
         &app_handle,
+        cancel_token,
+    )
+    .await;
+
+    // Cleanup the token regardless of outcome
+    state.cancellations.remove(&format!("chat:{session_id}"));
+
+    result
+}
+
+#[tauri::command]
+pub async fn cancel_chat(state: State<'_, AppState>, session_id: String) -> AppResult<()> {
+    state.cancellations.cancel(&format!("chat:{session_id}"));
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn generate_excalidraw(
+    state: State<'_, AppState>,
+    prompt: String,
+    existing_elements: Option<String>,
+    provider_id: Option<String>,
+    model_id: Option<String>,
+) -> AppResult<String> {
+    chat_service::generate_excalidraw(
+        state.pool(),
+        &prompt,
+        existing_elements.as_deref(),
+        provider_id.as_deref(),
+        model_id.as_deref(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn generate_title(
+    state: State<'_, AppState>,
+    session_id: String,
+    provider_id: Option<String>,
+    model_id: Option<String>,
+) -> AppResult<String> {
+    chat_service::generate_title(
+        state.pool(),
+        &session_id,
+        provider_id.as_deref(),
+        model_id.as_deref(),
     )
     .await
 }

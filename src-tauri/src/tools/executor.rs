@@ -276,10 +276,18 @@ impl ToolExecutor {
             .as_str()
             .ok_or_else(|| AppError::Validation("Missing 'command' field".to_string()))?;
 
-        let mut command = Command::new("sh");
+        // Platform-specific shell selection
+        let mut command = if cfg!(target_os = "windows") {
+            let mut cmd_process = Command::new("cmd");
+            cmd_process.arg("/C").arg(cmd);
+            cmd_process
+        } else {
+            let mut sh_process = Command::new("sh");
+            sh_process.arg("-c").arg(cmd);
+            sh_process
+        };
+
         command
-            .arg("-c")
-            .arg(cmd)
             .current_dir(&self.sandbox)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())

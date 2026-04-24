@@ -216,7 +216,7 @@ export function AgentsTab() {
           <button
             onClick={handleSave}
             disabled={loading || (localConfig.providerId !== null && localConfig.modelId === null)}
-            className="px-4 py-2 bg-white text-black text-sm font-medium rounded-lg hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-4 py-2 bg-[var(--accent)] text-[var(--accent-fg)] text-sm font-medium rounded-lg hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? 'Saving...' : 'Save Configuration'}
           </button>

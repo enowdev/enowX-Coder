@@ -1,29 +1,43 @@
-import { useMemo } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import rehypeHighlight from 'rehype-highlight';
 import { AgentRunWithTools, ToolCall } from '@/types';
-import { TimelineEvent } from './TimelineEvent';
 import { ToolExecutionBlock } from './ToolExecutionBlock';
 import { ThinkingBlock } from './ThinkingBlock';
-import {
-  Circle,
-  Dot,
-  Terminal,
-  WarningCircle,
-  ChatCircleText,
-} from '@phosphor-icons/react';
+import { MarkdownCodeBlock } from './MarkdownCodeBlock';
+import { useSettingsStore } from '@/stores/useSettingsStore';
+import { useAgentStore } from '@/stores/useAgentStore';
+import { Sparkle, CircleNotch, Copy, Check } from '@phosphor-icons/react';
+import { fixMarkdownTables } from '@/lib/utils';
+
+const markdownComponents = {
+  code: MarkdownCodeBlock as React.ComponentType<React.HTMLAttributes<HTMLElement>>,
+  pre: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+};
 
 interface AgentRunCardProps {
   run: AgentRunWithTools;
 }
 
 type TimelineEventItem =
-  | { kind: 'assistant_message'; key: string; content: string }
   | { kind: 'thinking'; key: string; content: string }
   | { kind: 'tool_execution'; key: string; tool: ToolCall }
   | { kind: 'tool_failed'; key: string; tool: ToolCall }
   | { kind: 'result'; key: string; content: string };
+
+/** Format duration between two ISO timestamps into a human-readable string */
+const formatDuration = (startedAt?: string, completedAt?: string): string | null => {
+  if (!startedAt || !completedAt) return null;
+  const ms = new Date(completedAt).getTime() - new Date(startedAt).getTime();
+  if (ms < 0) return null;
+  if (ms < 1000) return `${ms}ms`;
+  const secs = ms / 1000;
+  if (secs < 60) return `${secs.toFixed(1)}s`;
+  const mins = Math.floor(secs / 60);
+  const remainSecs = Math.round(secs % 60);
+  return `${mins}m ${remainSecs}s`;
+};
 
 export function AgentRunCard({ run }: AgentRunCardProps) {
   const normalizedBlocks = run.thinkingBlocks
@@ -31,24 +45,27 @@ export function AgentRunCard({ run }: AgentRunCardProps) {
     .filter((b) => b.length > 0);
   const liveStream = run.streamingText.trim();
 
+  // Get model name from agent config or default provider
+  const { agentConfigs } = useAgentStore();
+  const { providers, selectedModelId } = useSettingsStore();
+  const agentConfig = agentConfigs.find((c) => c.agentType === run.agentType);
+  const modelName = agentConfig?.modelId
+    ?? selectedModelId
+    ?? providers.find((p) => p.isDefault)?.model
+    ?? null;
+
+  const duration = formatDuration(run.startedAt, run.completedAt);
+  const isRunning = run.status === 'running';
+
   const events = useMemo<TimelineEventItem[]>(() => {
     const list: TimelineEventItem[] = [];
 
-    const intro = `Agent: ${run.agentType} (${run.status})`;
-    list.push({ kind: 'assistant_message', key: `${run.id}-intro`, content: intro });
-
+    // Thinking blocks (collapsed, from previous iterations)
     normalizedBlocks.forEach((block, i) => {
       list.push({ kind: 'thinking', key: `${run.id}-thinking-${i}`, content: block });
     });
 
-    if (run.status === 'running' && liveStream.length > 0) {
-      list.push({
-        kind: 'thinking',
-        key: `${run.id}-thinking-live`,
-        content: liveStream,
-      });
-    }
-
+    // Tool calls
     run.toolCalls.forEach((tool) => {
       if (tool.status === 'failed') {
         list.push({ kind: 'tool_failed', key: `${run.id}-${tool.id}-failed`, tool });
@@ -57,6 +74,12 @@ export function AgentRunCard({ run }: AgentRunCardProps) {
       }
     });
 
+    // Live streaming text — show as result (markdown rendered) while generating
+    if (run.status === 'running' && liveStream.length > 0) {
+      list.push({ kind: 'result', key: `${run.id}-streaming`, content: liveStream });
+    }
+
+    // Final output
     if (run.status === 'completed' && run.output) {
       list.push({ kind: 'result', key: `${run.id}-result`, content: run.output });
     }
@@ -67,7 +90,6 @@ export function AgentRunCard({ run }: AgentRunCardProps) {
 
     return list;
   }, [
-    run.agentType,
     run.id,
     run.output,
     run.error,
@@ -77,76 +99,97 @@ export function AgentRunCard({ run }: AgentRunCardProps) {
     liveStream,
   ]);
 
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = useCallback(async () => {
+    const text = run.output ?? run.error ?? '';
+    if (!text) return;
+    await navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }, [run.output, run.error]);
+
   return (
-    <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--surface)]/70 p-3">
-      <div className="space-y-3">
-        {events.map((event, index) => {
-          const showConnector = index < events.length - 1;
+    <div className="flex gap-3 w-full">
+      {/* Avatar */}
+      <div className="w-7 h-7 rounded-full bg-[var(--accent)] flex items-center justify-center shrink-0 mt-0.5">
+        <Sparkle size={14} weight="fill" className="text-[var(--accent-fg)]" />
+      </div>
 
-          if (event.kind === 'assistant_message') {
+      {/* Content */}
+      <div className="min-w-0 flex-1 space-y-3 pt-0.5">
+        {/* Agent type + status */}
+        <div className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)]">
+          <span className="font-medium">{run.agentType}</span>
+          {isRunning && (
+            <>
+              <span className="text-[var(--text-subtle)]">·</span>
+              <CircleNotch size={11} weight="bold" className="text-[var(--accent)] animate-spin" />
+            </>
+          )}
+        </div>
+
+        {/* Events */}
+        <div className="space-y-2">
+          {events.map((event) => {
+            if (event.kind === 'thinking') {
+              return <ThinkingBlock key={event.key} content={event.content} defaultCollapsed={true} />;
+            }
+
+            if (event.kind === 'tool_execution') {
+              return <ToolExecutionBlock key={event.key} tool={event.tool} defaultExpanded={false} />;
+            }
+
+            if (event.kind === 'tool_failed') {
+              return <ToolExecutionBlock key={event.key} tool={event.tool} defaultExpanded={true} />;
+            }
+
+            // result (or live streaming)
+            const isLiveStreaming = isRunning && event.key.endsWith('-streaming');
             return (
-              <TimelineEvent
-                key={event.key}
-                showConnector={showConnector}
-                icon={<Dot size={14} weight="fill" className="text-white" />}
-              >
-                <div className="text-[13px] leading-relaxed text-[var(--text)]">
-                  {event.content}
-                </div>
-              </TimelineEvent>
-            );
-          }
-
-          if (event.kind === 'thinking') {
-            return (
-              <TimelineEvent
-                key={event.key}
-                showConnector={showConnector}
-                icon={<Circle size={10} weight="fill" className="text-[var(--text-muted)]" />}
-              >
-                <ThinkingBlock content={event.content} defaultCollapsed={true} />
-              </TimelineEvent>
-            );
-          }
-
-          if (event.kind === 'tool_execution') {
-            return (
-              <TimelineEvent
-                key={event.key}
-                showConnector={showConnector}
-                icon={<Terminal size={13} weight="duotone" className="text-[var(--text-muted)]" />}
-              >
-                <ToolExecutionBlock tool={event.tool} defaultExpanded={false} />
-              </TimelineEvent>
-            );
-          }
-
-          if (event.kind === 'tool_failed') {
-            return (
-              <TimelineEvent
-                key={event.key}
-                showConnector={showConnector}
-                icon={<WarningCircle size={13} weight="duotone" className="text-white" />}
-              >
-                <ToolExecutionBlock tool={event.tool} defaultExpanded={true} />
-              </TimelineEvent>
-            );
-          }
-
-          return (
-            <TimelineEvent
-              key={event.key}
-              showConnector={showConnector}
-              icon={<ChatCircleText size={13} weight="duotone" className="text-white" />}
-            >
-              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/60 px-3 py-3 ai-prose ai-prose-readable text-[var(--text)]">
-                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
-                  {event.content}
+              <div key={event.key} className="ai-prose ai-prose-readable text-[var(--text)]">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={[rehypeHighlight]}
+                  components={markdownComponents}
+                >
+                  {fixMarkdownTables(event.content)}
                 </ReactMarkdown>
+                {isLiveStreaming && (
+                  <span className="inline-block w-0.5 h-4 bg-[var(--accent)] ml-0.5 align-middle animate-pulse rounded-full" />
+                )}
               </div>
-            </TimelineEvent>
-          );
-        })}
+            );
+          })}
+        </div>
+
+        {/* Bottom bar: copy + model + duration — only after generation is done */}
+        {!isRunning && (run.output || run.error) && (
+          <div className="flex items-center gap-3 pt-1 text-[11px] text-[var(--text-subtle)]">
+            <button
+              onClick={() => void handleCopy()}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded-md hover:bg-[var(--surface-2)] hover:text-[var(--text-muted)] transition-colors"
+              title="Copy response"
+            >
+              {copied ? <Check size={12} weight="bold" className="text-[var(--accent)]" /> : <Copy size={12} />}
+              <span>{copied ? 'Copied' : 'Copy'}</span>
+            </button>
+
+            {modelName && (
+              <>
+                <span>·</span>
+                <span>{modelName}</span>
+              </>
+            )}
+
+            {duration && (
+              <>
+                <span>·</span>
+                <span>{duration}</span>
+              </>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -2,12 +2,24 @@ import { useEffect } from 'react';
 import { AppShell } from '@/components/layout/AppShell';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useProjectStore } from '@/stores/useProjectStore';
+import { useUIStore } from '@/stores/useUIStore';
 import { generateId } from '@/lib/utils';
 
 function App() {
   const addSession = useSessionStore((s) => s.addSession);
   const setActiveSessionId = useSessionStore((s) => s.setActiveSessionId);
   const activeProjectId = useProjectStore((s) => s.activeProjectId);
+  const theme = useUIStore((s) => s.theme);
+
+  // Apply theme class to document root
+  useEffect(() => {
+    const root = document.documentElement;
+    if (theme === 'light') {
+      root.classList.add('light');
+    } else {
+      root.classList.remove('light');
+    }
+  }, [theme]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

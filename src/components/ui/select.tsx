@@ -18,7 +18,7 @@ const SelectTrigger = React.forwardRef<
       "bg-[var(--surface-3)] border border-[var(--border)]",
       "text-xs font-medium text-[var(--text-muted)] hover:text-[var(--text)]",
       "hover:bg-[var(--surface-2)] transition-colors",
-      "focus:outline-none focus:border-white/20",
+      "focus:outline-none focus:border-[var(--focus-border)]",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "whitespace-nowrap shrink-0",
       className
@@ -71,7 +71,7 @@ const SelectContent = React.forwardRef<
       className={cn(
         "relative z-50 min-w-[8rem] overflow-hidden rounded-xl",
         "bg-[var(--surface-2)] border border-[var(--border)]",
-        "shadow-xl shadow-black/40",
+        "shadow-xl shadow-[var(--shadow)]",
         "data-[state=open]:animate-in data-[state=closed]:animate-out",
         "data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
         "data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
@@ -85,8 +85,8 @@ const SelectContent = React.forwardRef<
       <SelectScrollUpButton />
       <SelectPrimitive.Viewport
         className={cn(
-          "p-1",
-          position === "popper" && "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]"
+          "p-1 max-h-[min(360px,var(--radix-select-content-available-height))] overflow-y-auto custom-scrollbar",
+          position === "popper" && "w-full min-w-[var(--radix-select-trigger-width)]"
         )}
       >
         {children}
@@ -118,8 +118,8 @@ const SelectItem = React.forwardRef<
     className={cn(
       "relative flex w-full cursor-pointer select-none items-center rounded-lg py-2 pl-3 pr-8",
       "text-xs text-[var(--text-muted)] outline-none",
-      "hover:bg-white/5 hover:text-[var(--text)]",
-      "focus:bg-white/5 focus:text-[var(--text)]",
+      "hover:bg-[var(--hover-bg)] hover:text-[var(--text)]",
+      "focus:bg-[var(--hover-bg)] focus:text-[var(--text)]",
       "data-[disabled]:pointer-events-none data-[disabled]:opacity-50",
       className
     )}

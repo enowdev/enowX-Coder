@@ -58,6 +58,15 @@ pub async fn set_default_provider(state: State<'_, AppState>, id: String) -> App
 }
 
 #[tauri::command]
+pub async fn toggle_provider_enabled(
+    state: State<'_, AppState>,
+    id: String,
+    enabled: bool,
+) -> AppResult<()> {
+    provider_service::toggle_provider_enabled(state.pool(), &id, enabled).await
+}
+
+#[tauri::command]
 pub async fn list_models(
     state: State<'_, AppState>,
     provider_id: String,

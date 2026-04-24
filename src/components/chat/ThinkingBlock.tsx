@@ -15,22 +15,18 @@ export const ThinkingBlock: React.FC<ThinkingBlockProps> = ({
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
 
   return (
-    <div className="rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/60 overflow-hidden">
+    <div>
       <button
         onClick={() => setCollapsed((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left"
+        className="flex items-center gap-1.5 text-[12px] text-[var(--text-muted)] hover:text-[var(--text)] transition-colors py-1"
       >
-        <div className="flex items-center gap-2">
-          <Brain size={13} weight="duotone" className="text-[var(--text-muted)]" />
-          <span className="text-[11px] uppercase tracking-wider font-bold text-[var(--text-muted)]">
-            {title}
-          </span>
-        </div>
-        {collapsed ? <CaretRight size={12} /> : <CaretDown size={12} />}
+        {collapsed ? <CaretRight size={10} weight="bold" /> : <CaretDown size={10} weight="bold" />}
+        <Brain size={12} weight="duotone" />
+        <span className="font-medium">{title}</span>
       </button>
 
       {!collapsed && (
-        <div className="px-3 pb-3 text-[12px] leading-relaxed text-[var(--text)] whitespace-pre-wrap">
+        <div className="ml-5 pl-3 border-l-2 border-[var(--border)] text-[12px] leading-relaxed text-[var(--text-muted)] whitespace-pre-wrap mt-1 mb-1">
           {content}
         </div>
       )}

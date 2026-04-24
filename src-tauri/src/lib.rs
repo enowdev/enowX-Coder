@@ -30,22 +30,29 @@ pub fn run() -> Result<(), AppError> {
             commands::session::update_session_title,
             commands::chat::get_messages,
             commands::chat::send_message,
+            commands::chat::generate_title,
+            commands::chat::generate_excalidraw,
+            commands::chat::cancel_chat,
             commands::provider::list_providers,
             commands::provider::create_provider,
             commands::provider::update_provider,
             commands::provider::delete_provider,
             commands::provider::set_default_provider,
+            commands::provider::toggle_provider_enabled,
             commands::provider::list_models,
             commands::provider::list_provider_models,
             commands::provider::upsert_provider_model,
             commands::provider::delete_provider_model,
+            commands::drawing::get_drawing,
+            commands::drawing::save_drawing,
             commands::agent::list_agent_runs,
             commands::agent::list_tool_calls,
             commands::agent::run_agent,
             commands::agent::cancel_agent,
             commands::agent::get_agent_config,
             commands::agent::upsert_agent_config,
-            commands::agent::list_agent_configs
+            commands::agent::list_agent_configs,
+            commands::agent::agent_permission_response
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -85,9 +92,7 @@ pub fn run() -> Result<(), AppError> {
 
             Ok(())
         })
-        .run(tauri::generate_context!(
-            "/run/media/enow/SSD2/enowX-Coder/src-tauri/tauri.conf.json"
-        ))?;
+        .run(tauri::generate_context!())?;
 
     Ok(())
 }

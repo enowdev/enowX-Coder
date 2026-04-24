@@ -2,7 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { useSessionStore } from '@/stores/useSessionStore';
 import { useProjectStore } from '@/stores/useProjectStore';
+import { useChatStore } from '@/stores/useChatStore';
+import { useAgentStore } from '@/stores/useAgentStore';
 import { FolderSimple, ChatCircleText, Trash, CaretRight, Plus } from '@phosphor-icons/react';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { cn } from '@/lib/utils';
 import { generateId } from '@/lib/utils';
 import { Session } from '@/types';
@@ -13,6 +16,7 @@ export const SessionList: React.FC = () => {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(() => {
     return new Set(activeProjectId ? [activeProjectId] : []);
   });
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     if (!activeProjectId) return;
@@ -49,9 +53,22 @@ export const SessionList: React.FC = () => {
     }
   };
 
-  const handleDeleteSession = async (e: React.MouseEvent, sessionId: string) => {
+  const handleDeleteSession = (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
+    setDeleteTarget(sessionId);
+  };
+
+  const confirmDeleteSession = async () => {
+    if (!deleteTarget) return;
+    const sessionId = deleteTarget;
+    setDeleteTarget(null);
+
+    const wasActive = activeSessionId === sessionId;
     removeSession(sessionId);
+    if (wasActive) {
+      useChatStore.getState().setMessages([]);
+      useAgentStore.getState().setAgentRuns([]);
+    }
 
     try {
       await invoke('delete_session', { id: sessionId });
@@ -78,7 +95,7 @@ export const SessionList: React.FC = () => {
         return (
           <div key={project.id}>
             <div
-              className="group flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded-md cursor-pointer hover:bg-white/5 transition-colors"
+              className="group flex items-center gap-1.5 px-2 py-1.5 mx-1 rounded-md cursor-pointer hover:bg-[var(--hover-bg)] transition-colors"
               onClick={() => toggleProject(project.id)}
             >
               <CaretRight
@@ -90,16 +107,16 @@ export const SessionList: React.FC = () => {
                 )}
               />
               <FolderSimple
-                size={14}
+                size={16}
                 weight={isExpanded ? 'fill' : 'regular'}
                 className="text-[var(--text-muted)] shrink-0"
               />
-              <span className="text-xs font-medium text-[var(--text-muted)] truncate flex-1 group-hover:text-[var(--text)]">
+              <span className="text-[13px] font-medium text-[var(--text-muted)] truncate flex-1 group-hover:text-[var(--text)]">
                 {project.name}
               </span>
               <button
                 onClick={(e) => handleNewSession(e, project.id)}
-                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 text-[var(--text-subtle)] hover:text-[var(--text)] transition-all"
+                className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--hover-bg-strong)] text-[var(--text-subtle)] hover:text-[var(--text)] transition-all"
                 title="New chat"
               >
                 <Plus size={12} />
@@ -115,15 +132,15 @@ export const SessionList: React.FC = () => {
                     <div
                       key={session.id}
                       className={cn(
-                        'group flex items-center gap-2 px-2 py-1.5 mx-1 rounded-md cursor-pointer transition-colors text-xs',
+                        'group flex items-center gap-2 px-2 py-1.5 mx-1 rounded-md cursor-pointer transition-colors text-[13px]',
                         activeSessionId === session.id
-                          ? 'bg-white/10 text-white'
-                          : 'text-[var(--text-subtle)] hover:bg-white/5 hover:text-[var(--text-muted)]'
+                          ? 'bg-[var(--hover-bg-strong)] text-[var(--text)]'
+                          : 'text-[var(--text-subtle)] hover:bg-[var(--hover-bg)] hover:text-[var(--text-muted)]'
                       )}
                       onClick={() => setActiveSessionId(session.id)}
                     >
                       <ChatCircleText
-                        size={13}
+                        size={15}
                         weight={activeSessionId === session.id ? 'fill' : 'regular'}
                         className="shrink-0"
                       />
@@ -132,7 +149,7 @@ export const SessionList: React.FC = () => {
                         onClick={(e) => {
                           void handleDeleteSession(e, session.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-white/10 transition-all"
+                        className="opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-[var(--hover-bg-strong)] transition-all"
                       >
                         <Trash size={11} />
                       </button>
@@ -144,6 +161,17 @@ export const SessionList: React.FC = () => {
           </div>
         );
       })}
+
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title="Delete Chat"
+        message={`Are you sure you want to delete "${sessions.find(s => s.id === deleteTarget)?.title ?? 'this chat'}"? This action cannot be undone.`}
+        confirmLabel="Delete"
+        cancelLabel="Cancel"
+        danger
+        onConfirm={() => void confirmDeleteSession()}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 };

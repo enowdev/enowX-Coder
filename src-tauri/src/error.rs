@@ -22,6 +22,8 @@ pub enum AppError {
     Tauri(String),
     #[error("Internal error: {0}")]
     Internal(String),
+    #[error("Cancelled")]
+    Cancelled,
 }
 
 impl From<AppError> for String {

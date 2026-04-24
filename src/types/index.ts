@@ -32,6 +32,7 @@ export interface Provider {
   model: string;
   isDefault: boolean;
   isBuiltin: boolean;
+  isEnabled: boolean;
   createdAt: string;
   updatedAt: string;
 }

@@ -2,21 +2,64 @@
 @plugin "@tailwindcss/typography";
 
 :root {
-  --bg: #0a0a0a;
-  --surface: #111111;
-  --surface-2: #1a1a1a;
-  --surface-3: #222222;
-  --border: #2a2a2a;
-  --border-strong: #3a3a3a;
-  --text: #ffffff;
-  --text-muted: #888888;
-  --text-subtle: #555555;
-  --accent: #ffffff;
-  --accent-hover: #e5e5e5;
-  --accent-fg: #000000;
+  --bg: #1a1816;
+  --surface: #201e1b;
+  --surface-2: #2a2724;
+  --surface-3: #33302c;
+  --border: #3d3a35;
+  --border-strong: #524e48;
+  --text: #e8e4de;
+  --text-muted: #9c9790;
+  --text-subtle: #6b6560;
+  --accent: #D4845A;
+  --accent-hover: #C17348;
+  --accent-fg: #1a1816;
+  --shadow: rgba(0, 0, 0, 0.5);
+  --overlay: rgba(0, 0, 0, 0.6);
+  --hover-bg: rgba(255, 255, 255, 0.05);
+  --hover-bg-strong: rgba(255, 255, 255, 0.1);
+  --focus-ring: rgba(212, 132, 90, 0.3);
+  --focus-border: rgba(212, 132, 90, 0.25);
+  --focus-glow: rgba(212, 132, 90, 0.08);
+  --inset-shadow: rgba(255, 255, 255, 0.03);
+  --link: #D4845A;
+  --link-hover: #E09A72;
+  --danger: #E24B4A;
+  --danger-hover: #F09595;
+  --danger-bg: rgba(226, 75, 74, 0.1);
+  --danger-border: rgba(226, 75, 74, 0.2);
   
   --sidebar-width-left: 260px;
   --sidebar-width-right: 320px;
+}
+
+:root.light {
+  --bg: #FFFFFF;
+  --surface: #F4F3EE;
+  --surface-2: #EAE8E1;
+  --surface-3: #E2E0D8;
+  --border: #D8D5CC;
+  --border-strong: #B1ADA1;
+  --text: #1a1816;
+  --text-muted: #6B6560;
+  --text-subtle: #9C9790;
+  --accent: #C15F3C;
+  --accent-hover: #A8502F;
+  --accent-fg: #FFFFFF;
+  --shadow: rgba(0, 0, 0, 0.08);
+  --overlay: rgba(0, 0, 0, 0.3);
+  --hover-bg: rgba(0, 0, 0, 0.04);
+  --hover-bg-strong: rgba(0, 0, 0, 0.08);
+  --focus-ring: rgba(193, 95, 60, 0.3);
+  --focus-border: rgba(193, 95, 60, 0.4);
+  --focus-glow: rgba(193, 95, 60, 0.08);
+  --inset-shadow: rgba(255, 255, 255, 0.5);
+  --link: #C15F3C;
+  --link-hover: #A8502F;
+  --danger: #dc2626;
+  --danger-hover: #ef4444;
+  --danger-bg: rgba(220, 38, 38, 0.08);
+  --danger-border: rgba(220, 38, 38, 0.15);
 }
 
 body {
@@ -63,7 +106,7 @@ body {
 }
 
 *:focus-visible {
-  outline: 1px solid rgba(255,255,255,0.25);
+  outline: 1px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -98,7 +141,7 @@ body {
   border-radius: 0.35rem;
   padding: 0.4rem 0.75rem;
   margin: 0.9rem 0;
-  color: #c8c8c8;
+  color: var(--text-muted);
 }
 
 .ai-prose-readable code {
@@ -110,7 +153,7 @@ body {
 }
 
 .ai-prose-readable td {
-  color: #d0d0d0;
+  color: var(--text-muted);
 }
 
 .ai-prose p { margin: 0 0 0.75rem; }
@@ -157,11 +200,11 @@ body {
 .ai-prose em { font-style: italic; color: var(--text-muted); }
 
 .ai-prose a {
-  color: #7eb8f7;
+  color: var(--link);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.ai-prose a:hover { color: #a8d0ff; }
+.ai-prose a:hover { color: var(--link-hover); }
 
 .ai-prose table {
   width: 100%;
@@ -183,6 +226,59 @@ body {
   color: var(--text-muted);
 }
 .ai-prose tr:nth-child(even) td { background: var(--surface-2); }
+
+/* Light theme syntax highlighting overrides */
+:root.light .hljs {
+  background: var(--surface-3) !important;
+  color: var(--text) !important;
+}
+
+:root.light .hljs-comment,
+:root.light .hljs-quote {
+  color: #6a737d;
+}
+
+:root.light .hljs-keyword,
+:root.light .hljs-selector-tag,
+:root.light .hljs-type {
+  color: #d73a49;
+}
+
+:root.light .hljs-string,
+:root.light .hljs-addition {
+  color: #22863a;
+}
+
+:root.light .hljs-number,
+:root.light .hljs-literal {
+  color: #005cc5;
+}
+
+:root.light .hljs-title,
+:root.light .hljs-section,
+:root.light .hljs-attr {
+  color: #6f42c1;
+}
+
+:root.light .hljs-name,
+:root.light .hljs-selector-id,
+:root.light .hljs-selector-class {
+  color: #005cc5;
+}
+
+:root.light .hljs-built_in,
+:root.light .hljs-builtin-name {
+  color: #e36209;
+}
+
+:root.light .hljs-deletion {
+  color: #b31d28;
+  background: #ffeef0;
+}
+
+:root.light .hljs-addition {
+  background: #f0fff4;
+}
 
 @keyframes letter-fade {
   0%, 100% { opacity: 0.2; }

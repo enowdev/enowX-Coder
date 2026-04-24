@@ -1,4 +1,5 @@
 import React from 'react';
+import { Sparkle } from '@phosphor-icons/react';
 import { useChatStore } from '@/stores/useChatStore';
 
 export const StreamingMessage: React.FC = () => {
@@ -7,18 +8,18 @@ export const StreamingMessage: React.FC = () => {
   if (!isStreaming) return null;
 
   return (
-    <div className="flex flex-col gap-1.5 w-full">
-      <div className="flex items-center gap-2 mb-1.5">
-        <div className="w-6 h-6 rounded-md bg-[var(--surface-3)] border border-[var(--border)] flex items-center justify-center text-[10px] font-bold text-white shrink-0">
-          AI
-        </div>
-        <span className="text-[12px] text-[var(--text-muted)] font-semibold tracking-wide">Assistant</span>
+    <div className="flex gap-3 w-full">
+      {/* Avatar */}
+      <div className="w-7 h-7 rounded-full bg-[var(--accent)] flex items-center justify-center shrink-0 mt-0.5">
+        <Sparkle size={14} weight="fill" className="text-[var(--accent-fg)]" />
       </div>
-      <div className="w-full px-5 py-4 rounded-xl text-[15px] leading-relaxed bg-[var(--surface)] text-[var(--text)] border border-[var(--border-strong)] shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+
+      {/* Content */}
+      <div className="min-w-0 flex-1 pt-0.5 text-[15px] leading-relaxed text-[var(--text)]">
         {streamingText ? (
           <>
             <span className="whitespace-pre-wrap">{streamingText}</span>
-            <span className="inline-block w-0.5 h-4 bg-white/70 ml-0.5 align-middle animate-pulse" />
+            <span className="inline-block w-0.5 h-4 bg-[var(--accent)] ml-0.5 align-middle animate-pulse rounded-full" />
           </>
         ) : (
           <span className="text-[var(--text-subtle)]" aria-label="Generating">
