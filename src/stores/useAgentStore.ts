@@ -24,7 +24,7 @@ interface AgentState {
 export const useAgentStore = create<AgentState>((set) => ({
   agentRuns: [],
   agentConfigs: [],
-  selectedAgentType: 'orchestrator',
+  selectedAgentType: 'chat',
   pendingPermission: null,
 
   setAgentRuns: (runs) => set({ agentRuns: runs }),

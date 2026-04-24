@@ -75,6 +75,24 @@
 
 ![Settings](screenshots/Providers.png)
 
+### Token Optimization — Before & After
+
+Prompt caching with Anthropic-format routing reduces token usage by **99.87%** on repeated requests.
+
+| | Before | After |
+|---|---|---|
+| **Total Tokens** | 19,819 | 26 |
+| **Prompt Tokens** | 19,779 | 0 (cache hit) |
+| **Completion Tokens** | 40 | 26 |
+
+**Before** — Every request sends the full system prompt (~19K prompt tokens):
+
+![Before Optimization](screenshots/before.png)
+
+**After** — Prompt caching enabled via Anthropic Messages API format (0 prompt tokens on cache hit):
+
+![After Optimization](screenshots/after.png)
+
 ---
 
 ## 🚀 Installation

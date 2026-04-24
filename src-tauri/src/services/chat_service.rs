@@ -14,6 +14,20 @@ use crate::{
 
 use super::{now_rfc3339, provider_service};
 
+/// Keywords that trigger full visual/preview system prompt injection
+const VISUAL_KEYWORDS: &[&str] = &[
+    "chart", "diagram", "graph", "visuali", "svg", "plot", "widget",
+    "mockup", "wireframe", "flowchart", "draw", "gambar", "buat grafik",
+    "bikin chart", "bikin diagram", "buatkan", "tampilkan", "tabel",
+    "html:preview", "interactive", "infographic", "dashboard", "canvas",
+    "pie chart", "bar chart", "line chart", "perbandingan", "statistik",
+];
+
+fn needs_visual_guide(content: &str) -> bool {
+    let lower = content.to_lowercase();
+    VISUAL_KEYWORDS.iter().any(|kw| lower.contains(kw))
+}
+
 pub async fn get_messages(db: &SqlitePool, session_id: &str) -> AppResult<Vec<Message>> {
     let messages = sqlx::query_as::<_, Message>(
         "SELECT id, session_id, role, content, created_at FROM messages \
@@ -24,6 +38,129 @@ pub async fn get_messages(db: &SqlitePool, session_id: &str) -> AppResult<Vec<Me
     .await?;
 
     Ok(messages)
+}
+
+/// Return a trimmed conversation window suitable for sending to the LLM.
+///
+/// Applies the same sliding-window + token-budget strategy used by the agent
+/// runner so that the chat path doesn't blow up token usage on long sessions.
+///
+/// Rules:
+///   - Keep at most the last `MAX_HISTORY_PAIRS` user/assistant exchanges.
+///   - Strip `html:preview` fenced blocks from assistant messages (huge, not
+///     useful as context).
+///   - Truncate individual messages that exceed per-role char limits.
+///   - Stop accumulating once the total char budget is reached.
+fn trim_history_for_llm(history: &[Message]) -> Vec<Message> {
+    const MAX_HISTORY_PAIRS: usize = 20;
+    const MAX_TOTAL_CHARS: usize = 32_000; // ≈ 8 K tokens
+    const MAX_USER_MSG_CHARS: usize = 2_000;
+    const MAX_ASSISTANT_MSG_CHARS: usize = 4_000;
+
+    // Separate system messages (always kept) from chat messages
+    let system_msgs: Vec<&Message> = history.iter().filter(|m| m.role == "system").collect();
+    let chat_msgs: Vec<&Message> = history.iter().filter(|m| m.role != "system").collect();
+
+    // Sliding window: keep only the most recent N*2 chat messages
+    let window_start = chat_msgs.len().saturating_sub(MAX_HISTORY_PAIRS * 2);
+    let windowed = &chat_msgs[window_start..];
+
+    let mut result: Vec<Message> = Vec::with_capacity(system_msgs.len() + windowed.len());
+    let mut total_chars: usize = 0;
+
+    // Always include system messages first (they're tiny)
+    for msg in &system_msgs {
+        total_chars += msg.content.len();
+        result.push((*msg).clone());
+    }
+
+    for msg in windowed {
+        if total_chars >= MAX_TOTAL_CHARS {
+            break;
+        }
+
+        let cleaned = if msg.role == "assistant" {
+            strip_preview_blocks_chat(&msg.content)
+        } else {
+            msg.content.clone()
+        };
+
+        let max_len = if msg.role == "user" {
+            MAX_USER_MSG_CHARS
+        } else {
+            MAX_ASSISTANT_MSG_CHARS
+        };
+
+        let truncated = if cleaned.len() > max_len {
+            let cut = &cleaned[..max_len];
+            let last_space = cut.rfind(' ').unwrap_or(max_len);
+            format!("{}… [truncated]", &cleaned[..last_space])
+        } else {
+            cleaned
+        };
+
+        total_chars += truncated.len();
+
+        result.push(Message {
+            id: msg.id.clone(),
+            session_id: msg.session_id.clone(),
+            role: msg.role.clone(),
+            content: truncated,
+            created_at: msg.created_at.clone(),
+        });
+    }
+
+    result
+}
+
+/// Strip ```html:preview … ``` fenced blocks from assistant output.
+/// These are rendered widgets that can be thousands of tokens and add no
+/// conversational value when sent back as context.
+fn strip_preview_blocks_chat(content: &str) -> String {
+    let mut result = String::with_capacity(content.len());
+    let mut chars = content.char_indices().peekable();
+    let fence_tag = "```html:preview";
+
+    while let Some(&(i, _)) = chars.peek() {
+        if content[i..].starts_with(fence_tag) {
+            // Skip past the opening fence line
+            while let Some(&(_, c)) = chars.peek() {
+                chars.next();
+                if c == '\n' {
+                    break;
+                }
+            }
+            // Skip until closing ```
+            let mut found_close = false;
+            while let Some(&(j, _)) = chars.peek() {
+                if content[j..].starts_with("```") {
+                    // consume the closing ```
+                    for _ in 0..3 {
+                        chars.next();
+                    }
+                    // consume rest of line
+                    while let Some(&(_, c)) = chars.peek() {
+                        chars.next();
+                        if c == '\n' {
+                            break;
+                        }
+                    }
+                    found_close = true;
+                    break;
+                }
+                chars.next();
+            }
+            result.push_str("[interactive preview]");
+            if !found_close {
+                break;
+            }
+        } else {
+            let (_, c) = chars.next().unwrap();
+            result.push(c);
+        }
+    }
+
+    result
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -113,13 +250,42 @@ async fn send_message_inner(
         )));
     }
 
-    let history = get_messages(db, session_id).await?;
+    let raw_history = get_messages(db, session_id).await?;
+    let history = trim_history_for_llm(&raw_history);
+
+    // Debug: log context size so token bloat is easy to spot
+    let total_chars: usize = history.iter().map(|m| m.content.len()).sum();
+    let est_tokens = total_chars / 4; // rough estimate: 1 token ≈ 4 chars
+    log::debug!(
+        "chat context: {} msgs (raw {}), ~{} chars (~{} tokens)",
+        history.len(),
+        raw_history.len(),
+        total_chars,
+        est_tokens,
+    );
 
     // Use caller-supplied model_id if provided, otherwise fall back to provider default
     let model = model_id.unwrap_or(&provider.model);
 
-    let assistant_output = if provider.provider_type == "anthropic" {
-        send_anthropic(history, model, provider.api_key.as_deref(), &on_token, &cancel_token).await?
+    log::info!(
+        "chat route: provider={} type={} api_format={} → {}",
+        provider.name,
+        provider.provider_type,
+        provider.api_format,
+        if provider.uses_anthropic_format() { "anthropic" } else { "openai" },
+    );
+
+    let assistant_output = if provider.uses_anthropic_format() {
+        send_anthropic(
+            history,
+            model,
+            provider.api_key.as_deref(),
+            &provider.provider_type,
+            &provider.base_url,
+            &on_token,
+            &cancel_token,
+        )
+        .await?
     } else {
         send_openai_compatible(
             &provider.base_url,
@@ -180,15 +346,24 @@ async fn send_openai_compatible(
         "stream": true,
     });
 
-    let system_instructions = concat!(
-        "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
-        "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
-        "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
-        "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
-        "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
-        "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
-        "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
-    );
+    // Lazy system prompt: only inject full preview guide when user asks for visuals
+    let last_user_content = history.iter().rev().find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
+    let system_instructions = if needs_visual_guide(last_user_content) {
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
+            "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
+            "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
+            "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
+            "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
+            "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
+        )
+    } else {
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "You can create interactive visualizations (charts, diagrams, widgets) by outputting a fenced code block with the language tag `html:preview`. The preview iframe has a full design system pre-loaded with CSS variables, SVG color ramp classes, and light/dark mode support. Use this when the user asks for any visual or interactive content."
+        )
+    };
     let payload_with_system = if let Some(arr) = payload.get("messages").and_then(Value::as_array) {
         let mut updated = arr.clone();
         updated.insert(
@@ -228,6 +403,8 @@ async fn send_anthropic(
     history: Vec<Message>,
     model: &str,
     api_key: Option<&str>,
+    provider_type: &str,
+    base_url: &str,
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
 ) -> AppResult<String> {
@@ -236,11 +413,29 @@ async fn send_anthropic(
     let (system_msgs, chat_msgs): (Vec<_>, Vec<_>) =
         history.iter().partition(|m| m.role == "system");
 
-    let messages: Vec<Value> = chat_msgs
+    // Build messages as Anthropic content-block format for cache_control support
+    let mut messages: Vec<Value> = chat_msgs
         .iter()
         .filter(|m| m.role == "user" || m.role == "assistant")
-        .map(|m| serde_json::json!({ "role": m.role, "content": m.content }))
+        .map(|m| {
+            serde_json::json!({
+                "role": m.role,
+                "content": [{ "type": "text", "text": m.content }]
+            })
+        })
         .collect();
+
+    // Prompt caching: mark last user message with cache_control so the entire
+    // conversation prefix is cached across turns (like Claude Desktop does).
+    if let Some(last_msg) = messages.last_mut() {
+        if last_msg.get("role").and_then(Value::as_str) == Some("user") {
+            if let Some(content) = last_msg.get_mut("content").and_then(Value::as_array_mut) {
+                if let Some(last_block) = content.last_mut() {
+                    last_block["cache_control"] = serde_json::json!({"type": "ephemeral"});
+                }
+            }
+        }
+    }
 
     let mut payload = serde_json::json!({
         "model": model,
@@ -250,29 +445,78 @@ async fn send_anthropic(
         "stream": true,
     });
 
-    let system_instructions_anthropic = concat!(
-        "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
-        "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
-        "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
-        "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
-        "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
-        "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
-        "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
-    );
-    if let Some(sys) = system_msgs.first() {
-        payload["system"] = serde_json::json!(format!("{}\n\n{}", sys.content, system_instructions_anthropic));
+    // Lazy system prompt for Anthropic: same logic as OpenAI path
+    let last_user_content_anthropic = chat_msgs.iter().rev().find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
+    let system_instructions_anthropic = if needs_visual_guide(last_user_content_anthropic) {
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
+            "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
+            "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
+            "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
+            "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
+            "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
+        )
     } else {
-        payload["system"] = serde_json::json!(system_instructions_anthropic);
-    }
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "You can create interactive visualizations (charts, diagrams, widgets) by outputting a fenced code block with the language tag `html:preview`. The preview iframe has a full design system pre-loaded with CSS variables, SVG color ramp classes, and light/dark mode support. Use this when the user asks for any visual or interactive content."
+        )
+    };
+    // Prompt caching: system prompt as cached content block
+    let system_text = if let Some(sys) = system_msgs.first() {
+        format!("{}\n\n{}", sys.content, system_instructions_anthropic)
+    } else {
+        system_instructions_anthropic.to_string()
+    };
+    payload["system"] = serde_json::json!([
+        {
+            "type": "text",
+            "text": system_text,
+            "cache_control": {"type": "ephemeral"}
+        }
+    ]);
+
+    // Resolve endpoint for Anthropic-format requests.
+    //
+    // - Anthropic direct: always use the canonical URL.
+    // - enowxlabs built-in: base_url ends with /v1 → strip it, append /messages
+    //   (enowxlabs gateway expects /messages at the root).
+    // - Custom gateways: keep the base_url as-is and append /messages.
+    //   If the user stored "http://host:port/v1" we keep /v1 so the final
+    //   endpoint is "http://host:port/v1/messages" — most Anthropic-compatible
+    //   proxies (e.g. LiteLLM, Claude Desktop gateway) expect this.
+    let endpoint = if provider_type == "anthropic" {
+        "https://api.anthropic.com/v1/messages".to_string()
+    } else if provider_type == "enowxlabs" {
+        // enowxlabs own gateway: strip /v1 suffix
+        format!(
+            "{}/messages",
+            base_url
+                .trim_end_matches('/')
+                .trim_end_matches("/v1")
+        )
+    } else {
+        // Custom / third-party gateway: preserve the full base_url path
+        format!("{}/messages", base_url.trim_end_matches('/'))
+    };
+
+    log::info!("anthropic endpoint: {} (base_url={}, provider_type={})", endpoint, base_url, provider_type);
 
     let mut request = client
-        .post("https://api.anthropic.com/v1/messages")
+        .post(&endpoint)
         .header(CONTENT_TYPE, "application/json")
         .header("anthropic-version", "2023-06-01")
+        .header("anthropic-beta", "prompt-caching-2024-07-31")
         .json(&payload);
 
+    // Auth: x-api-key for Anthropic direct, Bearer for gateways
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
-        request = request.header("x-api-key", key);
+        if provider_type == "anthropic" {
+            request = request.header("x-api-key", key);
+        } else {
+            request = request.header(AUTHORIZATION, format!("Bearer {key}"));
+        }
     }
 
     let response = request.send().await?;
@@ -282,7 +526,51 @@ async fn send_anthropic(
         return Err(AppError::Http(format!("Anthropic {status}: {body}")));
     }
 
-    stream_anthropic_sse(response, on_token, cancel_token).await
+    let output = stream_anthropic_sse(response, on_token, cancel_token).await?;
+
+    // Fallback: some gateways return message_start → message_stop without any
+    // content_block events for certain models.  Retry non-streaming.
+    if output.is_empty() {
+        log::warn!("anthropic chat stream returned empty — retrying non-streaming");
+        payload["stream"] = serde_json::json!(false);
+
+        let mut retry_req = client
+            .post(&endpoint)
+            .header(CONTENT_TYPE, "application/json")
+            .header("anthropic-version", "2023-06-01")
+            .json(&payload);
+
+        if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
+            if provider_type == "anthropic" {
+                retry_req = retry_req.header("x-api-key", key);
+            } else {
+                retry_req = retry_req.header(AUTHORIZATION, format!("Bearer {key}"));
+            }
+        }
+
+        let retry_resp = retry_req.send().await?;
+        if !retry_resp.status().is_success() {
+            let status = retry_resp.status();
+            let body = retry_resp.text().await.unwrap_or_default();
+            return Err(AppError::Http(format!("Anthropic non-stream {status}: {body}")));
+        }
+
+        let body: Value = retry_resp.json().await?;
+        if let Some(text) = body
+            .get("content")
+            .and_then(Value::as_array)
+            .and_then(|arr| arr.first())
+            .and_then(|block| block.get("text"))
+            .and_then(Value::as_str)
+        {
+            let _ = on_token.send(text.to_string());
+            return Ok(text.to_string());
+        }
+
+        return Ok(String::new());
+    }
+
+    Ok(output)
 }
 
 async fn stream_openai_sse(
@@ -372,6 +660,10 @@ async fn stream_anthropic_sse(
     let mut stream = response.bytes_stream();
     let mut line_buffer = String::new();
     let mut output = String::new();
+    // Track the most recent `event:` line so we can use it when parsing the
+    // subsequent `data:` line.  Some gateways omit the `"type"` field from
+    // the JSON payload, so we fall back to the SSE event name.
+    let mut current_event = String::new();
 
     loop {
         tokio::select! {
@@ -390,7 +682,7 @@ async fn stream_anthropic_sse(
                                 line.pop();
                             }
 
-                            if parse_anthropic_sse_line(&line, on_token, &mut output)? {
+                            if parse_anthropic_sse_line(&line, &mut current_event, on_token, &mut output)? {
                                 return Ok(output);
                             }
                         }
@@ -405,8 +697,14 @@ async fn stream_anthropic_sse(
     Ok(output)
 }
 
+/// Parse a single SSE line from an Anthropic-format stream.
+///
+/// `current_event` carries the most recent `event:` value across calls so that
+/// the `data:` handler can fall back to it when the JSON payload lacks a
+/// top-level `"type"` field (common with third-party gateways / proxies).
 fn parse_anthropic_sse_line(
     line: &str,
+    current_event: &mut String,
     on_token: &Channel<String>,
     output: &mut String,
 ) -> AppResult<bool> {
@@ -415,14 +713,17 @@ fn parse_anthropic_sse_line(
         return Ok(false);
     }
 
+    // ── event: line ──────────────────────────────────────────────────
     if let Some(event) = trimmed.strip_prefix("event:") {
         let event = event.trim();
+        *current_event = event.to_string();
         if event == "message_stop" {
             return Ok(true);
         }
         return Ok(false);
     }
 
+    // ── data: line ───────────────────────────────────────────────────
     let Some(payload) = trimmed.strip_prefix("data:") else {
         return Ok(false);
     };
@@ -433,7 +734,12 @@ fn parse_anthropic_sse_line(
         Err(_) => return Ok(false),
     };
 
-    let event_type = value.get("type").and_then(Value::as_str).unwrap_or("");
+    // Prefer `"type"` from the JSON payload; fall back to the preceding
+    // `event:` line when the gateway strips it.
+    let event_type = value
+        .get("type")
+        .and_then(Value::as_str)
+        .unwrap_or(current_event.as_str());
 
     match event_type {
         "content_block_delta" => {
@@ -493,7 +799,7 @@ pub async fn generate_title(
         "content": "Generate a short title for the conversation above."
     }));
 
-    let title = if provider.provider_type == "anthropic" {
+    let title = if provider.uses_anthropic_format() {
         generate_title_anthropic(&provider, model, &messages).await?
     } else {
         generate_title_openai(&provider, model, &messages).await?
@@ -589,15 +895,29 @@ async fn generate_title_anthropic(
         "temperature": 0.3,
     });
 
+    // Resolve endpoint: same logic as send_anthropic
+    let endpoint = if provider.provider_type == "anthropic" {
+        "https://api.anthropic.com/v1/messages".to_string()
+    } else if provider.provider_type == "enowxlabs" {
+        format!("{}/messages", provider.base_url.trim_end_matches('/').trim_end_matches("/v1"))
+    } else {
+        format!("{}/messages", provider.base_url.trim_end_matches('/'))
+    };
+
     let client = reqwest::Client::new();
     let mut request = client
-        .post("https://api.anthropic.com/v1/messages")
+        .post(&endpoint)
         .header(CONTENT_TYPE, "application/json")
         .header("anthropic-version", "2023-06-01")
         .json(&payload);
 
+    // Auth: x-api-key for Anthropic direct, Bearer for gateways
     if let Some(key) = provider.api_key.as_deref().filter(|k| !k.trim().is_empty()) {
-        request = request.header("x-api-key", key);
+        if provider.provider_type == "anthropic" {
+            request = request.header("x-api-key", key);
+        } else {
+            request = request.header(AUTHORIZATION, format!("Bearer {key}"));
+        }
     }
 
     let response = request.send().await?;

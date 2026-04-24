@@ -45,6 +45,7 @@ export const OnboardingWizard: React.FC<OnboardingWizardProps> = ({ onComplete }
       isDefault: true,
       isBuiltin: false,
       isEnabled: true,
+      apiFormat: (preset.type === 'anthropic' || preset.type === 'enowxlabs') ? 'anthropic' : 'openai',
       createdAt: now,
       updatedAt: now,
     };

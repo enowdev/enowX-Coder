@@ -9,7 +9,7 @@ use crate::{
 use super::now_rfc3339;
 
 const SELECT_COLS: &str =
-    "id, name, provider_type, base_url, api_key, model, is_default, is_builtin, is_enabled, created_at, updated_at";
+    "id, name, provider_type, base_url, api_key, model, is_default, is_builtin, is_enabled, api_format, created_at, updated_at";
 
 pub async fn list_providers(db: &SqlitePool) -> AppResult<Vec<Provider>> {
     let providers = sqlx::query_as::<_, Provider>(&format!(
@@ -28,6 +28,7 @@ pub async fn create_provider(
     base_url: &str,
     api_key: Option<&str>,
     model: &str,
+    api_format: Option<&str>,
 ) -> AppResult<Provider> {
     let normalized_name = name.trim();
     let normalized_provider_type = provider_type.trim();
@@ -54,6 +55,15 @@ pub async fn create_provider(
         u.to_string()
     };
 
+    // Infer api_format from provider_type when not explicitly set
+    let resolved_api_format = match api_format {
+        Some(f) if f == "anthropic" || f == "openai" => f.to_string(),
+        _ => match normalized_provider_type {
+            "anthropic" | "enowxlabs" => "anthropic".to_string(),
+            _ => "openai".to_string(),
+        },
+    };
+
     let now = now_rfc3339();
     let provider = Provider {
         id: Uuid::new_v4().to_string(),
@@ -65,12 +75,14 @@ pub async fn create_provider(
         is_default: false,
         is_builtin: false,
         is_enabled: true,
+        api_format: resolved_api_format,
         created_at: now.clone(),
         updated_at: now,
     };
 
     sqlx::query(
-        "INSERT INTO providers (id, name, provider_type, base_url, api_key, model, is_default, is_builtin, is_enabled, created_at, updated_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+        "INSERT INTO providers (id, name, provider_type, base_url, api_key, model, is_default, is_builtin, is_enabled, api_format, created_at, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
     )
     .bind(&provider.id)
     .bind(&provider.name)
@@ -81,6 +93,7 @@ pub async fn create_provider(
     .bind(provider.is_default)
     .bind(provider.is_builtin)
     .bind(provider.is_enabled)
+    .bind(&provider.api_format)
     .bind(&provider.created_at)
     .bind(&provider.updated_at)
     .execute(db)
@@ -96,6 +109,7 @@ pub async fn update_provider(
     base_url: &str,
     api_key: Option<&str>,
     model: &str,
+    api_format: Option<&str>,
 ) -> AppResult<()> {
     let existing = sqlx::query_as::<_, Provider>(&format!(
         "SELECT {SELECT_COLS} FROM providers WHERE id = ?1"
@@ -126,14 +140,21 @@ pub async fn update_provider(
         u.to_string()
     };
 
+    // Only update api_format if explicitly provided, otherwise keep existing
+    let resolved_api_format = match api_format {
+        Some(f) if f == "anthropic" || f == "openai" => f.to_string(),
+        _ => existing.api_format,
+    };
+
     let now = now_rfc3339();
     sqlx::query(
-        "UPDATE providers SET name = ?1, base_url = ?2, api_key = ?3, model = ?4, updated_at = ?5 WHERE id = ?6",
+        "UPDATE providers SET name = ?1, base_url = ?2, api_key = ?3, model = ?4, api_format = ?5, updated_at = ?6 WHERE id = ?7",
     )
     .bind(normalized_name)
     .bind(resolved_base_url)
     .bind(api_key)
     .bind(normalized_model)
+    .bind(&resolved_api_format)
     .bind(&now)
     .bind(id)
     .execute(db)
