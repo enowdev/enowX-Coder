@@ -14,6 +14,20 @@ use crate::{
 
 use super::{now_rfc3339, provider_service};
 
+/// Keywords that trigger full visual/preview system prompt injection
+const VISUAL_KEYWORDS: &[&str] = &[
+    "chart", "diagram", "graph", "visuali", "svg", "plot", "widget",
+    "mockup", "wireframe", "flowchart", "draw", "gambar", "buat grafik",
+    "bikin chart", "bikin diagram", "buatkan", "tampilkan", "tabel",
+    "html:preview", "interactive", "infographic", "dashboard", "canvas",
+    "pie chart", "bar chart", "line chart", "perbandingan", "statistik",
+];
+
+fn needs_visual_guide(content: &str) -> bool {
+    let lower = content.to_lowercase();
+    VISUAL_KEYWORDS.iter().any(|kw| lower.contains(kw))
+}
+
 pub async fn get_messages(db: &SqlitePool, session_id: &str) -> AppResult<Vec<Message>> {
     let messages = sqlx::query_as::<_, Message>(
         "SELECT id, session_id, role, content, created_at FROM messages \
@@ -180,15 +194,24 @@ async fn send_openai_compatible(
         "stream": true,
     });
 
-    let system_instructions = concat!(
-        "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
-        "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
-        "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
-        "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
-        "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
-        "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
-        "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
-    );
+    // Lazy system prompt: only inject full preview guide when user asks for visuals
+    let last_user_content = history.iter().rev().find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
+    let system_instructions = if needs_visual_guide(last_user_content) {
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
+            "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
+            "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
+            "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
+            "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
+            "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
+        )
+    } else {
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "You can create interactive visualizations (charts, diagrams, widgets) by outputting a fenced code block with the language tag `html:preview`. The preview iframe has a full design system pre-loaded with CSS variables, SVG color ramp classes, and light/dark mode support. Use this when the user asks for any visual or interactive content."
+        )
+    };
     let payload_with_system = if let Some(arr) = payload.get("messages").and_then(Value::as_array) {
         let mut updated = arr.clone();
         updated.insert(
@@ -250,25 +273,43 @@ async fn send_anthropic(
         "stream": true,
     });
 
-    let system_instructions_anthropic = concat!(
-        "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
-        "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
-        "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
-        "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
-        "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
-        "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
-        "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
-    );
-    if let Some(sys) = system_msgs.first() {
-        payload["system"] = serde_json::json!(format!("{}\n\n{}", sys.content, system_instructions_anthropic));
+    // Lazy system prompt for Anthropic: same logic as OpenAI path
+    let last_user_content_anthropic = chat_msgs.iter().rev().find(|m| m.role == "user").map(|m| m.content.as_str()).unwrap_or("");
+    let system_instructions_anthropic = if needs_visual_guide(last_user_content_anthropic) {
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
+            "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
+            "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
+            "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
+            "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
+            "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
+        )
     } else {
-        payload["system"] = serde_json::json!(system_instructions_anthropic);
-    }
+        concat!(
+            "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+            "You can create interactive visualizations (charts, diagrams, widgets) by outputting a fenced code block with the language tag `html:preview`. The preview iframe has a full design system pre-loaded with CSS variables, SVG color ramp classes, and light/dark mode support. Use this when the user asks for any visual or interactive content."
+        )
+    };
+    // Prompt caching: system prompt as cached content block
+    let system_text = if let Some(sys) = system_msgs.first() {
+        format!("{}\n\n{}", sys.content, system_instructions_anthropic)
+    } else {
+        system_instructions_anthropic.to_string()
+    };
+    payload["system"] = serde_json::json!([
+        {
+            "type": "text",
+            "text": system_text,
+            "cache_control": {"type": "ephemeral"}
+        }
+    ]);
 
     let mut request = client
         .post("https://api.anthropic.com/v1/messages")
         .header(CONTENT_TYPE, "application/json")
         .header("anthropic-version", "2023-06-01")
+        .header("anthropic-beta", "prompt-caching-2024-07-31")
         .json(&payload);
 
     if let Some(key) = api_key.filter(|k| !k.trim().is_empty()) {
