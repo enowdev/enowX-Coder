@@ -64,6 +64,7 @@ export interface AgentRun {
 }
 
 export type AgentType =
+  | 'chat'
   | 'orchestrator'
   | 'planner'
   | 'coder_fe'
@@ -76,9 +77,10 @@ export type AgentType =
   | 'researcher'
   | 'librarian';
 
-export const SELECTABLE_AGENTS: AgentType[] = ['orchestrator', 'planner'];
+export const SELECTABLE_AGENTS: AgentType[] = ['chat', 'orchestrator', 'planner'];
 
 export const AGENT_LABELS: Record<AgentType, string> = {
+  chat: 'Chat',
   orchestrator: 'Orchestrator',
   planner: 'Planner',
   coder_fe: 'Coder FE',

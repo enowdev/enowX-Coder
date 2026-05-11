@@ -434,7 +434,7 @@ export const AppShell: React.FC = () => {
 
     const { sessionId: currentSessionId, projectPath } = ctx;
 
-    if (selectedAgentType === 'orchestrator' || selectedAgentType === 'planner') {
+    if (selectedAgentType !== 'chat') {
       const userMsg: Message = {
         id: crypto.randomUUID(),
         sessionId: currentSessionId,

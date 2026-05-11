@@ -1,13 +1,16 @@
 import React, { useState } from 'react';
-import { Robot, Code, ChartBar, TerminalWindow, Cpu, Books, SidebarSimple } from '@phosphor-icons/react';
+import { Robot, Code, ChartBar, TerminalWindow, Cpu, Books, SidebarSimple, CircleNotch, CheckCircle, XCircle } from '@phosphor-icons/react';
 import { cn } from '@/lib/utils';
 import { useUIStore } from '@/stores/useUIStore';
+import { useAgentStore } from '@/stores/useAgentStore';
+import { AGENT_LABELS } from '@/types';
 
 type Tab = 'agents' | 'skills' | 'metrics';
 
 export const RightSidebar: React.FC = () => {
   const [activeTab, setActiveTab] = useState<Tab>('agents');
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
+  const agentRuns = useAgentStore((s) => s.agentRuns);
 
   const tabs = [
     { id: 'agents' as Tab, icon: Robot, label: 'Agents' },
@@ -52,13 +55,54 @@ export const RightSidebar: React.FC = () => {
               <Cpu size={14} weight="duotone" />
               Active Agents
             </h3>
-            <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 text-center space-y-2">
-              <div className="w-10 h-10 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center mx-auto">
-                <TerminalWindow size={20} weight="duotone" className="text-[var(--text)]" />
+            {agentRuns.length === 0 ? (
+              <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-2)]/50 text-center space-y-2">
+                <div className="w-10 h-10 rounded-full bg-[var(--surface)] border border-[var(--border)] flex items-center justify-center mx-auto">
+                  <TerminalWindow size={20} weight="duotone" className="text-[var(--text)]" />
+                </div>
+                <p className="text-xs font-medium">No agents running</p>
+                <p className="text-[10px] text-[var(--text-muted)]">Spawn an agent from the chat to see progress here.</p>
               </div>
-              <p className="text-xs font-medium">No agents running</p>
-              <p className="text-[10px] text-[var(--text-muted)]">Spawn an agent from the chat to see progress here.</p>
-            </div>
+            ) : (
+              <div className="space-y-2">
+                {agentRuns.map((run) => (
+                  <div
+                    key={run.id}
+                    className="p-3 rounded-lg border border-[var(--border)] bg-[var(--surface-2)]/30 space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {run.status === 'running' && (
+                          <CircleNotch size={14} weight="bold" className="text-[var(--accent)] animate-spin" />
+                        )}
+                        {run.status === 'completed' && (
+                          <CheckCircle size={14} weight="fill" className="text-green-500" />
+                        )}
+                        {run.status === 'failed' && (
+                          <XCircle size={14} weight="fill" className="text-red-500" />
+                        )}
+                        <span className="text-xs font-medium text-[var(--text)]">
+                          {AGENT_LABELS[run.agentType as keyof typeof AGENT_LABELS] || run.agentType}
+                        </span>
+                      </div>
+                      <span className="text-[10px] text-[var(--text-subtle)] uppercase tracking-wider">
+                        {run.status}
+                      </span>
+                    </div>
+                    {run.toolCalls.length > 0 && (
+                      <div className="text-[10px] text-[var(--text-muted)]">
+                        {run.toolCalls.filter(tc => tc.status === 'completed').length}/{run.toolCalls.length} tools completed
+                      </div>
+                    )}
+                    {run.streamingText && run.status === 'running' && (
+                      <div className="text-[10px] text-[var(--text-muted)] truncate">
+                        {run.streamingText.slice(0, 60)}...
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

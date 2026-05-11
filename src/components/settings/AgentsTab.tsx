@@ -5,6 +5,7 @@ import { useAgentStore } from '@/stores/useAgentStore';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import {
+  ChatCircle,
   Robot,
   TreeStructure,
   Code,
@@ -19,6 +20,7 @@ import {
 } from '@phosphor-icons/react';
 
 const AGENT_TYPES: AgentType[] = [
+  'chat',
   'orchestrator',
   'planner',
   'coder_fe',
@@ -33,6 +35,7 @@ const AGENT_TYPES: AgentType[] = [
 ];
 
 const AGENT_ICONS: Record<AgentType, React.ElementType> = {
+  chat: ChatCircle,
   orchestrator: Robot,
   planner: TreeStructure,
   coder_fe: Code,
@@ -49,7 +52,7 @@ const AGENT_ICONS: Record<AgentType, React.ElementType> = {
 export function AgentsTab() {
   const { providers } = useSettingsStore();
   const { agentConfigs, setAgentConfigs, upsertAgentConfig } = useAgentStore();
-  const [selectedAgent, setSelectedAgent] = useState<AgentType>('orchestrator');
+  const [selectedAgent, setSelectedAgent] = useState<AgentType>('chat');
   const [loading, setLoading] = useState(false);
   const [models, setModels] = useState<string[]>([]);
   const [localConfig, setLocalConfig] = useState<{ providerId: string | null; modelId: string | null }>({
