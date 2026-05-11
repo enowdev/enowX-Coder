@@ -1071,7 +1071,10 @@ impl AgentRunner {
             "stream": true,
         });
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()?;
         let mut request = client
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
@@ -1113,7 +1116,10 @@ impl AgentRunner {
             payload["system"] = Value::String(system_prompt);
         }
 
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()?;
         let mut request = client
             .post("https://api.anthropic.com/v1/messages")
             .header(CONTENT_TYPE, "application/json")

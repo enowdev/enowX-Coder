@@ -163,7 +163,10 @@ async fn send_openai_compatible(
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
 ) -> AppResult<String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
     let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
     let messages: Vec<Value> = history
@@ -231,7 +234,10 @@ async fn send_anthropic(
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
 ) -> AppResult<String> {
-    let client = reqwest::Client::new();
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .build()?;
 
     let (system_msgs, chat_msgs): (Vec<_>, Vec<_>) =
         history.iter().partition(|m| m.role == "system");

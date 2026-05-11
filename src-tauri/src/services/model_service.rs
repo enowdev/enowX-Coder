@@ -42,7 +42,10 @@ pub async fn list_models(
 
 async fn fetch_openai_models(base_url: &str, api_key: Option<&str>) -> AppResult<Vec<String>> {
     let url = format!("{}/models", base_url.trim_end_matches('/'));
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()?;
     let mut req = client.get(&url);
 
     if let Some(key) = api_key {
@@ -75,7 +78,10 @@ async fn fetch_openai_models(base_url: &str, api_key: Option<&str>) -> AppResult
 }
 
 async fn fetch_anthropic_models(api_key: Option<&str>) -> AppResult<Vec<String>> {
-    let client = Client::new();
+    let client = Client::builder()
+        .timeout(std::time::Duration::from_secs(10))
+        .connect_timeout(std::time::Duration::from_secs(5))
+        .build()?;
     let mut req = client
         .get("https://api.anthropic.com/v1/models")
         .header("anthropic-version", "2023-06-01");
