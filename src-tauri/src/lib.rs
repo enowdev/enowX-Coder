@@ -71,6 +71,9 @@ pub fn run() -> Result<(), AppError> {
             let (tx, rx) = std::sync::mpsc::channel::<Result<AppState, String>>();
 
             std::thread::spawn(move || {
+                // Runtime creation failure is unrecoverable — app cannot function without async runtime.
+                // Using expect() here is appropriate as there's no meaningful recovery path.
+                #[allow(clippy::disallowed_methods)]
                 let rt = tokio::runtime::Runtime::new().expect("failed to create tokio runtime");
                 let result = rt.block_on(async {
                     let app_state = AppState::new(&db_url).await.map_err(|e| e.to_string())?;
@@ -92,6 +95,9 @@ pub fn run() -> Result<(), AppError> {
 
             Ok(())
         })
+        // tauri::generate_context!() macro expansion contains .unwrap() calls.
+        // This is part of Tauri's code generation and cannot be avoided.
+        #[allow(clippy::disallowed_methods)]
         .run(tauri::generate_context!())?;
 
     Ok(())

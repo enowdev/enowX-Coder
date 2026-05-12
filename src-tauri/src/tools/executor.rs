@@ -359,6 +359,7 @@ impl ToolExecutor {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)] // Tests can use unwrap/expect for brevity
 mod tests {
     use super::*;
 

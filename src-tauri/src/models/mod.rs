@@ -20,6 +20,7 @@ pub use tool_call::ToolCall;
 
 
 #[cfg(test)]
+#[allow(clippy::disallowed_methods)]
 mod tests {
     use super::*;
 
