@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
 import { useCommandPaletteStore } from '@/stores/useCommandPaletteStore';
-import { formatShortcut } from '@/lib/useKeyboardShortcut';
 import { MagnifyingGlass, X } from '@phosphor-icons/react';
 
 export function CommandPalette() {
@@ -102,7 +101,7 @@ export function CommandPalette() {
                 <div className="px-4 py-2 text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider bg-[var(--background)]">
                   {category}
                 </div>
-                {cmds.map((cmd, idx) => {
+                {cmds.map((cmd) => {
                   const globalIndex = filteredCommands.indexOf(cmd);
                   const isSelected = globalIndex === selectedIndex;
                   return (

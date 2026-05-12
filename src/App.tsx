@@ -17,7 +17,6 @@ function App() {
   const toggleRightSidebar = useUIStore((s) => s.toggleRightSidebar);
   const setSettingsOpen = useUIStore((s) => s.setSettingsOpen);
   const setMainView = useUIStore((s) => s.setMainView);
-  const mainView = useUIStore((s) => s.mainView);
   
   const { open: openCommandPalette, registerCommand } = useCommandPaletteStore();
 
