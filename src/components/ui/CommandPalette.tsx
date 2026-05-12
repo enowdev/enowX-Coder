@@ -18,6 +18,11 @@ export function CommandPalette() {
     );
   }, [commands, search]);
 
+  // Reset selectedIndex when filtered commands change
+  useEffect(() => {
+    setSelectedIndex(0);
+  }, [filteredCommands]);
+
   useEffect(() => {
     if (isOpen) {
       setSearch('');
