@@ -92,7 +92,7 @@ mod tests {
 
     #[test]
     fn test_error_to_string() {
-        let err: String = AppError::NotFound("test").into();
+        let err: String = AppError::NotFound("test".to_string()).into();
         assert_eq!(err, "Not found: test");
     }
 }

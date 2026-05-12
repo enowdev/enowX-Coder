@@ -27,12 +27,11 @@ mod tests {
     #[test]
     fn test_project_serialization() {
         let p = Project {
-            id: 1,
+            id: "test-id-123".to_string(),
             name: "test-project".to_string(),
-            path: "/home/test/project".to_string(),
-            session_count: 0,
-            last_opened_at: "2025-01-01T00:00:00Z".to_string(),
+            path: Some("/home/test/project".to_string()),
             created_at: "2025-01-01T00:00:00Z".to_string(),
+            updated_at: "2025-01-01T00:00:00Z".to_string(),
         };
         let json = serde_json::to_string(&p).unwrap();
         assert!(json.contains("test-project"));
