@@ -16,7 +16,7 @@ use crate::error::AppError;
 pub fn run() -> Result<(), AppError> {
     let _ = env_logger::try_init();
 
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
@@ -94,11 +94,12 @@ pub fn run() -> Result<(), AppError> {
             app_handle.manage(app_state);
 
             Ok(())
-        })
-        // tauri::generate_context!() macro expansion contains .unwrap() calls.
-        // This is part of Tauri's code generation and cannot be avoided.
-        #[allow(clippy::disallowed_methods)]
-        .run(tauri::generate_context!())?;
+        });
+
+    // tauri::generate_context!() macro expansion contains .unwrap() calls.
+    // This is part of Tauri's code generation and cannot be avoided.
+    #[allow(clippy::disallowed_methods)]
+    builder.run(tauri::generate_context!())?;
 
     Ok(())
 }
