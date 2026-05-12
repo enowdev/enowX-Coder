@@ -14,8 +14,8 @@ import {
   FilePlus,
   Trash,
   PencilSimple,
+  CircleNotch,
 } from '@phosphor-icons/react';
-import { LoadingSpinner } from './LoadingSpinner';
 
 const FILE_ICONS: Record<string, typeof File> = {
   // Code files
@@ -331,7 +331,7 @@ export function FileTree() {
           </div>
         ) : isLoading ? (
           <div className="flex items-center justify-center h-32">
-            <LoadingSpinner size={24} />
+            <CircleNotch size={24} className="animate-spin text-[var(--accent)]" weight="bold" />
           </div>
         ) : filteredFiles.length === 0 ? (
           <div className="p-4 text-center text-sm text-[var(--text-secondary)]">
