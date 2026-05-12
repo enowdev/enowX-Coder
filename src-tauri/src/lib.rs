@@ -52,7 +52,14 @@ pub fn run() -> Result<(), AppError> {
             commands::agent::get_agent_config,
             commands::agent::upsert_agent_config,
             commands::agent::list_agent_configs,
-            commands::agent::agent_permission_response
+            commands::agent::agent_permission_response,
+            commands::file_commands::read_directory,
+            commands::file_commands::read_file_content,
+            commands::file_commands::write_file_content,
+            commands::file_commands::create_file,
+            commands::file_commands::create_directory,
+            commands::file_commands::delete_file,
+            commands::file_commands::rename_file
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
