@@ -1,3 +1,8 @@
+// serde_json::json! macro internally uses .unwrap() in its expansion.
+// This module uses json! extensively for OpenAI API payloads — allowing at module level
+// to avoid repetitive per-call annotations. Manual unwrap/expect calls are still forbidden.
+#![allow(clippy::disallowed_methods)]
+
 use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::Value;
@@ -679,15 +684,11 @@ pub async fn generate_excalidraw(
     let provider = provider_service::get_provider_for_chat(db, provider_id).await?;
     let model = model_id.unwrap_or(&provider.model);
 
-    // serde_json::json! macro internally uses .unwrap() in its expansion.
-    // This is safe because JSON construction from literals cannot fail.
-    #[allow(clippy::disallowed_methods)]
     let mut messages = vec![
         serde_json::json!({"role": "system", "content": EXCALIDRAW_SYSTEM_PROMPT}),
     ];
 
     // If there are existing elements, include them so AI can edit
-    #[allow(clippy::disallowed_methods)]
     if let Some(elements) = existing_elements {
         messages.push(serde_json::json!({
             "role": "user",
@@ -699,15 +700,11 @@ pub async fn generate_excalidraw(
         }));
     }
 
-    #[allow(clippy::disallowed_methods)]
-    {
-        messages.push(serde_json::json!({"role": "user", "content": prompt}));
-    }
+    messages.push(serde_json::json!({"role": "user", "content": prompt}));
 
     let client = reqwest::Client::new();
     let endpoint = format!("{}/chat/completions", provider.base_url.trim_end_matches('/'));
 
-    #[allow(clippy::disallowed_methods)]
     let payload = serde_json::json!({
         "model": model,
         "messages": messages,
