@@ -1,0 +1,5 @@
+disallowed-methods = [
+    { path = "std::option::Option::unwrap", reason = "use expect() with a message or handle the None case" },
+    { path = "std::result::Result::unwrap", reason = "use expect() with a message or handle the Err case" },
+    { path = "std::result::Result::expect", reason = "use proper error handling with AppError" },
+]

@@ -1,14 +1,43 @@
 use std::path::{Component, Path, PathBuf};
 use std::process::Stdio;
+use std::sync::OnceLock;
 use std::time::Duration;
 
-use globset::{GlobBuilder, GlobSetBuilder};
+use globset::GlobSet;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::process::Command;
 use walkdir::WalkDir;
 
 use crate::error::{AppError, AppResult};
+
+/// Sensitive file patterns — built once, shared across all ToolExecutor instances.
+static SENSITIVE_GLOBSET: OnceLock<GlobSet> = OnceLock::new();
+
+fn sensitive_globset() -> &'static GlobSet {
+    SENSITIVE_GLOBSET.get_or_init(|| {
+        use globset::{GlobBuilder, GlobSetBuilder};
+        let mut builder = GlobSetBuilder::new();
+        let patterns = [
+            ".env",
+            ".env.*",
+            "**/.env",
+            "**/.env.*",
+            "**/*.pem",
+            "**/*.key",
+            "**/.ssh/**",
+        ];
+        for pattern in patterns {
+            if let Ok(glob) = GlobBuilder::new(pattern).build() {
+                builder.add(glob);
+            }
+        }
+        builder
+            .build()
+            .map_err(|error| format!("sensitive globset build failed: {error}"))
+            .unwrap_or_else(|error| panic!("{}", error))
+    })
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -102,26 +131,7 @@ impl ToolExecutor {
     }
 
     fn is_sensitive_file(&self, path: &Path) -> bool {
-        let mut builder = GlobSetBuilder::new();
-        let patterns = [
-            ".env",
-            ".env.*",
-            "**/.env",
-            "**/.env.*",
-            "**/*.pem",
-            "**/*.key",
-            "**/.ssh/**",
-        ];
-        for pattern in patterns {
-            if let Ok(glob) = GlobBuilder::new(pattern).build() {
-                builder.add(glob);
-            }
-        }
-
-        builder
-            .build()
-            .map(|globset| globset.is_match(path))
-            .unwrap_or(false)
+        sensitive_globset().is_match(path)
     }
 
     pub async fn execute(&self, call: ToolCall) -> ToolResult {
@@ -181,7 +191,9 @@ impl ToolExecutor {
     }
 
     async fn list_dir(&self, input: &serde_json::Value) -> AppResult<String> {
-        let path_str = input["path"].as_str().unwrap_or(".");
+        let Some(path_str) = input["path"].as_str() else {
+            return Err(AppError::Validation("Missing 'path' field".to_string()));
+        };
         let safe_path = self.validate_path(path_str)?;
         let sandbox_canonical = self.sandbox.canonicalize().map_err(AppError::from)?;
 
@@ -202,7 +214,7 @@ impl ToolExecutor {
 
             let rel = canonical
                 .strip_prefix(&sandbox_canonical)
-                .unwrap_or(&canonical);
+                .map_err(|e| AppError::Internal(format!("strip_prefix failed: {e}")))?;
             let kind = if entry.file_type().is_dir() {
                 "dir"
             } else {
@@ -218,7 +230,9 @@ impl ToolExecutor {
         let pattern_str = input["pattern"]
             .as_str()
             .ok_or_else(|| AppError::Validation("Missing 'pattern' field".to_string()))?;
-        let path_str = input["path"].as_str().unwrap_or(".");
+        let path_str = input["path"]
+            .as_str()
+            .ok_or_else(|| AppError::Validation("Missing 'path' field".to_string()))?;
         let safe_path = self.validate_path(path_str)?;
         let sandbox_canonical = self.sandbox.canonicalize().map_err(AppError::from)?;
         let regex = Regex::new(pattern_str)
@@ -251,7 +265,7 @@ impl ToolExecutor {
                 if regex.is_match(line) {
                     let rel = canonical
                         .strip_prefix(&sandbox_canonical)
-                        .unwrap_or(&canonical);
+                        .map_err(|e| AppError::Internal(format!("strip_prefix failed: {e}")))?;
                     results.push(format!("{}:{}: {}", rel.display(), line_index + 1, line));
                     if results.len() >= 100 {
                         break;
@@ -339,5 +353,522 @@ impl ToolExecutor {
 
     pub fn is_outside_sandbox(&self, path: &str) -> bool {
         self.validate_path(path).is_err()
+    }
+}
+
+// ─── Tests ────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── Helpers ────────────────────────────────────────────────────────────────
+
+    fn with_sandbox(test_name: &str) -> PathBuf {
+        let base = PathBuf::from("/tmp");
+        let path = base.join(format!("enowx-test-{}", test_name));
+        if path.exists() {
+            std::fs::remove_dir_all(&path).expect("cleanup sandbox");
+        }
+        std::fs::create_dir_all(&path).expect("create sandbox");
+        path
+    }
+
+    fn cleanup(test_name: &str) {
+        let path = PathBuf::from("/tmp").join(format!("enowx-test-{}", test_name));
+        if path.exists() {
+            std::fs::remove_dir_all(&path).ok();
+        }
+    }
+
+    // ── Path Traversal ─────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_path_traversal_dots() {
+        let sandbox_path = with_sandbox("path_traversal_dots");
+
+        // Create a real file inside sandbox
+        tokio::fs::write(sandbox_path.join("safe.txt"), "hello")
+            .await
+            .expect("create safe.txt");
+
+        let executor = ToolExecutor::new(sandbox_path.clone());
+
+        // Attempt traversal via relative path — should be rejected
+        let call = ToolCall {
+            tool: ToolName::ReadFile,
+            input: serde_json::json!({ "path": "../../../../etc/passwd" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            result.is_error,
+            "Path traversal with .. should be rejected, got: {}",
+            result.output
+        );
+
+        cleanup("path_traversal_dots");
+    }
+
+    #[tokio::test]
+    async fn test_path_traversal_absolute_escape() {
+        let sandbox_path = with_sandbox("path_traversal_abs");
+
+        tokio::fs::write(sandbox_path.join("safe.txt"), "hello")
+            .await
+            .expect("create safe.txt");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        // Absolute path pointing outside sandbox
+        let call = ToolCall {
+            tool: ToolName::ReadFile,
+            input: serde_json::json!({ "path": "/etc/passwd" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            result.is_error,
+            "Absolute path outside sandbox should be rejected, got: {}",
+            result.output
+        );
+
+        cleanup("path_traversal_abs");
+    }
+
+    #[tokio::test]
+    async fn test_is_outside_sandbox() {
+        let sandbox_path = with_sandbox("outside_sandbox");
+
+        tokio::fs::write(sandbox_path.join("file.txt"), "data")
+            .await
+            .expect("create file");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        // Path inside sandbox
+        assert!(!executor.is_outside_sandbox("file.txt"));
+        assert!(!executor.is_outside_sandbox("subdir/file.txt"));
+
+        // Path attempting escape via ..
+        assert!(executor.is_outside_sandbox("../outside.txt"));
+        assert!(executor.is_outside_sandbox("../../etc/passwd"));
+
+        // Absolute path outside sandbox
+        assert!(executor.is_outside_sandbox("/etc/shadow"));
+
+        cleanup("outside_sandbox");
+    }
+
+    // ── Read / Write File ─────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_read_write_file_roundtrip() {
+        let sandbox_path = with_sandbox("rw_roundtrip");
+
+        tokio::fs::write(sandbox_path.join("hello.txt"), "initial")
+            .await
+            .expect("create file");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        // Write
+        let call = ToolCall {
+            tool: ToolName::WriteFile,
+            input: serde_json::json!({
+                "path": "hello.txt",
+                "content": "updated content here"
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "write should succeed: {}", result.output);
+
+        // Read back
+        let call = ToolCall {
+            tool: ToolName::ReadFile,
+            input: serde_json::json!({ "path": "hello.txt" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "read should succeed: {}", result.output);
+        assert_eq!(result.output, "updated content here");
+
+        cleanup("rw_roundtrip");
+    }
+
+    #[tokio::test]
+    async fn test_write_file_creates_parent_dirs() {
+        let sandbox_path = with_sandbox("rw_mkdirs");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::WriteFile,
+            input: serde_json::json!({
+                "path": "deeply/nested/dir/file.txt",
+                "content": "nested data"
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            !result.is_error,
+            "write with nested dirs should succeed: {}",
+            result.output
+        );
+
+        // Verify file exists by reading it back
+        let call = ToolCall {
+            tool: ToolName::ReadFile,
+            input: serde_json::json!({ "path": "deeply/nested/dir/file.txt" }),
+        };
+        let result = executor.execute(call).await;
+        assert_eq!(result.output, "nested data");
+
+        cleanup("rw_mkdirs");
+    }
+
+    #[tokio::test]
+    async fn test_read_missing_field() {
+        let sandbox_path = with_sandbox("read_missing");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::ReadFile,
+            input: serde_json::json!({ "wrong_field": "value" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(result.is_error);
+        assert!(result.output.contains("Missing 'path' field"));
+
+        cleanup("read_missing");
+    }
+
+    // ── List Directory ────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_list_dir() {
+        let sandbox_path = with_sandbox("list_dir");
+
+        tokio::fs::write(sandbox_path.join("file1.txt"), "a").await.unwrap();
+        tokio::fs::write(sandbox_path.join("file2.rs"), "b").await.unwrap();
+        tokio::fs::create_dir_all(sandbox_path.join("subdir")).await.unwrap();
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::ListDir,
+            input: serde_json::json!({ "path": "." }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "list_dir should succeed: {}", result.output);
+        assert!(result.output.contains("file1.txt"));
+        assert!(result.output.contains("file2.rs"));
+        assert!(result.output.contains("subdir"));
+
+        // Each entry should have [dir] or [file] prefix
+        for line in result.output.lines() {
+            assert!(
+                line.starts_with("[dir] ") || line.starts_with("[file] "),
+                "Unexpected line format: {line}"
+            );
+        }
+
+        cleanup("list_dir");
+    }
+
+    #[tokio::test]
+    async fn test_list_dir_path_traversal_attack() {
+        let sandbox_path = with_sandbox("list_dir_traversal");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        // Attempt to list outside sandbox
+        let call = ToolCall {
+            tool: ToolName::ListDir,
+            input: serde_json::json!({ "path": "../../.." }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            result.is_error,
+            "list_dir with traversal should be rejected: {}",
+            result.output
+        );
+
+        cleanup("list_dir_traversal");
+    }
+
+    #[tokio::test]
+    async fn test_list_dir_missing_path() {
+        let sandbox_path = with_sandbox("list_dir_missing");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::ListDir,
+            input: serde_json::json!({}),
+        };
+        let result = executor.execute(call).await;
+        assert!(result.is_error);
+        assert!(result.output.contains("Missing 'path' field"));
+
+        cleanup("list_dir_missing");
+    }
+
+    // ── Search Files ────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_search_files_match() {
+        let sandbox_path = with_sandbox("search_files");
+
+        tokio::fs::write(sandbox_path.join("test.rs"), "fn hello() {}")
+            .await
+            .expect("create test.rs");
+        tokio::fs::write(sandbox_path.join("ignore.txt"), "no match here")
+            .await
+            .expect("create ignore.txt");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::SearchFiles,
+            input: serde_json::json!({
+                "pattern": "fn hello",
+                "path": "."
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "search should succeed: {}", result.output);
+        assert!(result.output.contains("test.rs"));
+        assert!(result.output.contains("fn hello() {}"));
+        assert!(!result.output.contains("ignore.txt"));
+
+        cleanup("search_files");
+    }
+
+    #[tokio::test]
+    async fn test_search_files_invalid_regex() {
+        let sandbox_path = with_sandbox("search_invalid_regex");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::SearchFiles,
+            input: serde_json::json!({
+                "pattern": "[invalid regex",
+                "path": "."
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(result.is_error);
+        assert!(result.output.contains("Invalid regex"));
+
+        cleanup("search_invalid_regex");
+    }
+
+    #[tokio::test]
+    async fn test_search_files_no_matches() {
+        let sandbox_path = with_sandbox("search_no_match");
+
+        tokio::fs::write(sandbox_path.join("file.txt"), "nothing to see")
+            .await
+            .expect("create file");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::SearchFiles,
+            input: serde_json::json!({
+                "pattern": "NONEXISTENT_PATTERN_XYZ",
+                "path": "."
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error);
+        assert_eq!(result.output, "No matches found");
+
+        cleanup("search_no_match");
+    }
+
+    // ── Sensitive File Detection ────────────────────────────────────────────
+
+    #[test]
+    fn test_requires_permission_env_files() {
+        let executor = ToolExecutor::new(PathBuf::from("/tmp/sandbox"));
+
+        // Should require permission
+        assert!(executor.requires_permission(".env"));
+        assert!(executor.requires_permission(".env.local"));
+        assert!(executor.requires_permission(".env.production"));
+        assert!(executor.requires_permission("config/.env"));
+        assert!(executor.requires_permission("config/.env.local"));
+    }
+
+    #[test]
+    fn test_requires_permission_crypto_files() {
+        let executor = ToolExecutor::new(PathBuf::from("/tmp/sandbox"));
+
+        assert!(executor.requires_permission("server.key"));
+        assert!(executor.requires_permission("certs/server.key"));
+        assert!(executor.requires_permission("server.pem"));
+        assert!(executor.requires_permission("certs/server.pem"));
+    }
+
+    #[test]
+    fn test_requires_permission_ssh_files() {
+        let executor = ToolExecutor::new(PathBuf::from("/tmp/sandbox"));
+
+        assert!(executor.requires_permission(".ssh/id_rsa"));
+        assert!(executor.requires_permission(".ssh/config"));
+        assert!(executor.requires_permission("home/user/.ssh/authorized_keys"));
+    }
+
+    #[test]
+    fn test_does_not_require_permission_for_normal_files() {
+        let executor = ToolExecutor::new(PathBuf::from("/tmp/sandbox"));
+
+        assert!(!executor.requires_permission("src/main.rs"));
+        assert!(!executor.requires_permission("package.json"));
+        assert!(!executor.requires_permission("README.md"));
+        assert!(!executor.requires_permission("Cargo.toml"));
+        assert!(!executor.requires_permission("index.html"));
+        assert!(!executor.requires_permission("data.txt"));
+        assert!(!executor.requires_permission("config.yaml"));
+    }
+
+    // ── Run Command ──────────────────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_run_command_success() {
+        let sandbox_path = with_sandbox("run_cmd_success");
+
+        tokio::fs::write(sandbox_path.join("hello.txt"), "world")
+            .await
+            .expect("create file");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::RunCommand,
+            input: serde_json::json!({ "command": "cat hello.txt" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "command should succeed: {}", result.output);
+        assert!(result.output.contains("stdout:"));
+        assert!(result.output.contains("world"));
+
+        cleanup("run_cmd_success");
+    }
+
+    #[tokio::test]
+    async fn test_run_command_missing_field() {
+        let sandbox_path = with_sandbox("run_cmd_missing");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::RunCommand,
+            input: serde_json::json!({}),
+        };
+        let result = executor.execute(call).await;
+        assert!(result.is_error);
+        assert!(result.output.contains("Missing 'command' field"));
+
+        cleanup("run_cmd_missing");
+    }
+
+    #[tokio::test]
+    async fn test_run_command_invalid_command() {
+        let sandbox_path = with_sandbox("run_cmd_invalid");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::RunCommand,
+            input: serde_json::json!({ "command": "nonexistent_command_xyz_12345" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            result.is_error,
+            "invalid command should fail: {}",
+            result.output
+        );
+
+        cleanup("run_cmd_invalid");
+    }
+
+    #[tokio::test]
+    async fn test_run_command_timeout() {
+        let sandbox_path = with_sandbox("run_cmd_timeout");
+
+        let mut executor = ToolExecutor::new(sandbox_path);
+        executor.command_timeout = Duration::from_millis(200);
+
+        let call = ToolCall {
+            tool: ToolName::RunCommand,
+            input: serde_json::json!({ "command": "sleep 60" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            result.is_error,
+            "timeout should trigger error: {}",
+            result.output
+        );
+        assert!(result.output.contains("Command timed out"));
+        assert!(result.output.contains("60s"));
+
+        cleanup("run_cmd_timeout");
+    }
+
+    // ── validate_path edge cases ─────────────────────────────────────────────
+
+    #[tokio::test]
+    async fn test_validate_path_valid_nested() {
+        let sandbox_path = with_sandbox("validate_nested");
+
+        tokio::fs::create_dir_all(sandbox_path.join("a/b/c"))
+            .await
+            .unwrap();
+        tokio::fs::write(sandbox_path.join("a/b/c/file.txt"), "data")
+            .await
+            .unwrap();
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::ReadFile,
+            input: serde_json::json!({ "path": "a/b/c/file.txt" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "should read nested file: {}", result.output);
+        assert_eq!(result.output, "data");
+
+        cleanup("validate_nested");
+    }
+
+    // ── normalize_relative edge cases ────────────────────────────────────────
+
+    #[test]
+    fn test_normalize_relative_curdir() {
+        let result = ToolExecutor::normalize_relative(Path::new("./src/main.rs"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Path::new("src/main.rs"));
+    }
+
+    #[test]
+    fn test_normalize_relative_leading_dotdot() {
+        let result = ToolExecutor::normalize_relative(Path::new("../outside"));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_normalize_relative_deep_dotdot() {
+        let result = ToolExecutor::normalize_relative(Path::new("a/b/../../c"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Path::new("c"));
+    }
+
+    #[test]
+    fn test_normalize_relative_normal_only() {
+        let result = ToolExecutor::normalize_relative(Path::new("src/components/App.tsx"));
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), Path::new("src/components/App.tsx"));
     }
 }
