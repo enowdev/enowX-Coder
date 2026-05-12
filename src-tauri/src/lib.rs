@@ -52,7 +52,18 @@ pub fn run() -> Result<(), AppError> {
             commands::agent::get_agent_config,
             commands::agent::upsert_agent_config,
             commands::agent::list_agent_configs,
-            commands::agent::agent_permission_response
+            commands::agent::agent_permission_response,
+            commands::git::git_status,
+            commands::git::git_branches,
+            commands::git::git_current_branch,
+            commands::git::git_log,
+            commands::git::git_stage,
+            commands::git::git_unstage,
+            commands::git::git_commit,
+            commands::git::git_push,
+            commands::git::git_pull,
+            commands::git::git_checkout,
+            commands::git::git_diff
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
