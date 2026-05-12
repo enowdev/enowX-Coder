@@ -52,7 +52,11 @@ pub fn run() -> Result<(), AppError> {
             commands::agent::get_agent_config,
             commands::agent::upsert_agent_config,
             commands::agent::list_agent_configs,
-            commands::agent::agent_permission_response
+            commands::agent::agent_permission_response,
+            commands::terminal::create_terminal_session,
+            commands::terminal::write_to_terminal,
+            commands::terminal::close_terminal_session,
+            commands::terminal::resize_terminal
         ])
         .setup(|app| {
             let app_handle = app.handle().clone();
@@ -89,6 +93,10 @@ pub fn run() -> Result<(), AppError> {
                 .map_err(|e| Box::new(AppError::Database(e)))?;
 
             app_handle.manage(app_state);
+            
+            // Initialize terminal session map
+            let terminal_sessions: std::collections::HashMap<String, std::process::Child> = std::collections::HashMap::new();
+            app_handle.manage(std::sync::Arc::new(std::sync::Mutex::new(terminal_sessions)));
 
             Ok(())
         })
