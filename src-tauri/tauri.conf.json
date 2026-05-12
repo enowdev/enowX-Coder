@@ -19,7 +19,7 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self' blob:; connect-src 'self' https://* http://localhost:*; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'",
       "assetProtocol": {
         "enable": true
       }
@@ -27,13 +27,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": [
+      "deb",
+      "appimage",
+      "msi",
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "linux": {
+      "deb": {
+        "depends": [
+          "libwebkit2gtk-4.1-0"
+        ],
+        "section": "devel",
+        "priority": "optional"
+      }
+    },
+    "windows": {
+      "certificateThumbprint": null,
+      "digestAlgorithm": "sha256",
+      "timestampUrl": ""
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUyNzY4MDdFMzI4RjUwQkMKUldRZnM1L3NMR3dYMFhQb2pZT0ZlK3hZSG9kR1dVZE5lMjVhYU9tZkVtSGN1Qk5hZm5mZjNpU3cK",
+      "endpoints": [
+        "https://github.com/kevinnft/enowX-Coder/releases/latest/download/latest.json"
+      ]
+    }
   }
 }

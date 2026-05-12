@@ -67,3 +67,32 @@ impl From<tauri::Error> for AppError {
         Self::Tauri(value.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_not_found_error() {
+        let err = AppError::NotFound("resource".to_string());
+        assert_eq!(err.to_string(), "Not found: resource");
+    }
+
+    #[test]
+    fn test_validation_error() {
+        let err = AppError::Validation("invalid input".to_string());
+        assert_eq!(err.to_string(), "Validation error: invalid input");
+    }
+
+    #[test]
+    fn test_cancelled_error() {
+        let err = AppError::Cancelled;
+        assert_eq!(err.to_string(), "Cancelled");
+    }
+
+    #[test]
+    fn test_error_to_string() {
+        let err: String = AppError::NotFound("test").into();
+        assert_eq!(err, "Not found: test");
+    }
+}
