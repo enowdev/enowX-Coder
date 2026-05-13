@@ -16,41 +16,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  create-release:
-    name: Create Release
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create-release.outputs.id }}
-      version: ${{ steps.version.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Resolve version
-        id: version
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            VERSION="${{ github.event.inputs.version }}"
-          else
-            VERSION="${GITHUB_REF#refs/tags/}"
-          fi
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Create GitHub Release
-        id: create-release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          RELEASE_ID=$(gh release create "$VERSION" \
-            --repo "${{ github.repository }}" \
-            --title "$VERSION" \
-            --generate-notes \
-            --draft \
-            --json id --jq '.id')
-          echo "id=$RELEASE_ID" >> "$GITHUB_OUTPUT"
-
   build:
-    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -73,6 +39,17 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ github.event.inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@v2
@@ -107,22 +84,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ needs.create-release.outputs.version }}
-          releaseName: ${{ needs.create-release.outputs.version }}
+          tagName: ${{ steps.version.outputs.version }}
+          releaseName: ${{ steps.version.outputs.version }}
           releaseBody: 'See assets below for download.'
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
-
-  publish-release:
-    name: Publish Release
-    needs: [create-release, build]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Publish release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release edit "${{ needs.create-release.outputs.version }}" \
-            --repo "${{ github.repository }}" \
-            --draft=false
