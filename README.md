@@ -88,7 +88,7 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/mhmmadazis/enowX-Coder.git
+git clone https://github.com/enowdev/enowX-Coder.git
 cd enowX-Coder
 
 # Install dependencies
@@ -295,8 +295,8 @@ This project is licensed under the **Apache License 2.0** - see the [LICENSE](LI
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/mhmmadazis/enowX-Coder/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/mhmmadazis/enowX-Coder/discussions)
+- **Issues**: [GitHub Issues](https://github.com/enowdev/enowX-Coder/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/enowdev/enowX-Coder/discussions)
 - **Email**: support@enowx.dev
 
 ---

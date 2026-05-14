@@ -60,7 +60,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDUyNzY4MDdFMzI4RjUwQkMKUldRZnM1L3NMR3dYMFhQb2pZT0ZlK3hZSG9kR1dVZE5lMjVhYU9tZkVtSGN1Qk5hZm5mZjNpU3cK",
       "endpoints": [
-        "https://github.com/kevinnft/enowX-Coder/releases/latest/download/latest.json"
+        "https://github.com/enowdev/enowX-Coder/releases/latest/download/latest.json"
       ]
     }
   }
