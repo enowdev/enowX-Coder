@@ -1007,6 +1007,27 @@ impl AgentRunner {
         executor: &ToolExecutor,
         tool_call: &ParsedToolCall,
     ) -> Option<oneshot::Receiver<bool>> {
+        if tool_call.name == "run_command" {
+            let command = tool_call
+                .input
+                .get("command")
+                .and_then(Value::as_str)
+                .map(std::string::ToString::to_string)?;
+
+            let rx = self.permissions.register(agent_run_id.to_string());
+
+            let _ = self.app_handle.emit(
+                "agent-permission-request",
+                AgentPermissionRequestEvent {
+                    agent_run_id: agent_run_id.to_string(),
+                    permission_type: "shell_command".to_string(),
+                    path: command,
+                    agent_type: agent_type.to_string(),
+                },
+            );
+            return Some(rx);
+        }
+
         let path = tool_call
             .input
             .get("path")

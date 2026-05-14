@@ -31,6 +31,11 @@ export function PermissionDialog({ request, onAllow, onDeny }: PermissionDialogP
               Agent <span className="font-semibold text-[var(--text)]">{agentLabel}</span> wants to access a path outside the project:
             </>
           )}
+          {request.type === 'shell_command' && (
+            <>
+              Agent <span className="font-semibold text-[var(--text)]">{agentLabel}</span> wants to run a shell command:
+            </>
+          )}
           <br />
           <span className="inline-block mt-2 font-mono text-xs bg-[var(--surface-2)] px-2 py-1 rounded border border-[var(--border)] break-all">
             {request.path}

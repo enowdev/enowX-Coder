@@ -123,7 +123,7 @@ export interface AgentRunWithTools extends AgentRun {
 }
 
 export interface PermissionRequest {
-  type: 'sensitive_file' | 'outside_sandbox';
+  type: 'sensitive_file' | 'outside_sandbox' | 'shell_command';
   path: string;
   agentType: AgentType;
   agentRunId: string;

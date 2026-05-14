@@ -309,7 +309,7 @@ export const AppShell: React.FC = () => {
 
       const unlistenPermission = await listen<{
         agentRunId: string;
-        type: 'sensitive_file' | 'outside_sandbox';
+        type: 'sensitive_file' | 'outside_sandbox' | 'shell_command';
         path: string;
         agentType: string;
       }>('agent-permission-request', (event) => {
