@@ -14,6 +14,16 @@ use crate::{
 
 use super::{now_rfc3339, provider_service};
 
+const CHAT_SYSTEM_INSTRUCTIONS: &str = concat!(
+    "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
+    "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
+    "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
+    "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
+    "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
+    "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
+    "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
+);
+
 pub async fn get_messages(db: &SqlitePool, session_id: &str) -> AppResult<Vec<Message>> {
     let messages = sqlx::query_as::<_, Message>(
         "SELECT id, session_id, role, content, created_at FROM messages \
@@ -180,22 +190,13 @@ async fn send_openai_compatible(
         "stream": true,
     });
 
-    let system_instructions = concat!(
-        "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
-        "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
-        "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
-        "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
-        "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
-        "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
-        "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
-    );
     let payload_with_system = if let Some(arr) = payload.get("messages").and_then(Value::as_array) {
         let mut updated = arr.clone();
         updated.insert(
             0,
             serde_json::json!({
                 "role": "system",
-                "content": system_instructions,
+                "content": CHAT_SYSTEM_INSTRUCTIONS,
             }),
         );
         let mut p = payload.clone();
@@ -250,19 +251,10 @@ async fn send_anthropic(
         "stream": true,
     });
 
-    let system_instructions_anthropic = concat!(
-        "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.\n\n",
-        "INTERACTIVE PREVIEW: When the user asks for a visualization, diagram, chart, interactive demo, or any visual HTML content, output it as a fenced code block with tag `html:preview`. The app renders it as a live iframe preview with a full design system pre-loaded (CSS variables, SVG color ramp classes, pre-styled form elements, light/dark mode).\n\n",
-        "Design rules: flat (no gradients/shadows/glow), use CSS vars for colors (var(--color-text-primary), var(--color-background-secondary), etc). system-ui font, 2 weights (400/500), sentence case. Structure: style → content → script last.\n\n",
-        "SVG diagrams: use pre-loaded classes — `.t` (14px text), `.ts` (12px), `.th` (14px bold), `.box` (neutral), `.node` (clickable), `.arr` (arrow), `.leader` (dashed). Color ramps: `class=\"c-blue\"` on `<g>` wrapping shape+text — auto light/dark. Available: c-purple, c-teal, c-coral, c-blue, c-amber, c-green, c-red, c-gray, c-pink. Max 2-3 ramps per diagram.\n\n",
-        "Chart.js: wrap canvas in div with position:relative + explicit height. Load UMD from cdnjs.cloudflare.com with onload callback. Disable default legend, build custom HTML legend with 10px colored squares.\n\n",
-        "Interactive: form elements pre-styled. Use sendPrompt(text) for drill-down. CDN: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh only.\n\n",
-        "Always output COMPLETE standalone HTML (DOCTYPE, html, head, body). No titles/prose inside widget — explanations go in your response text."
-    );
     if let Some(sys) = system_msgs.first() {
-        payload["system"] = serde_json::json!(format!("{}\n\n{}", sys.content, system_instructions_anthropic));
+        payload["system"] = serde_json::json!(format!("{}\n\n{}", sys.content, CHAT_SYSTEM_INSTRUCTIONS));
     } else {
-        payload["system"] = serde_json::json!(system_instructions_anthropic);
+        payload["system"] = serde_json::json!(CHAT_SYSTEM_INSTRUCTIONS);
     }
 
     let mut request = client
@@ -372,8 +364,9 @@ async fn stream_anthropic_sse(
     let mut stream = response.bytes_stream();
     let mut line_buffer = String::new();
     let mut output = String::new();
+    let mut message_stop_received = false;
 
-    loop {
+    'outer: loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
                 return Err(AppError::Cancelled);
@@ -391,7 +384,8 @@ async fn stream_anthropic_sse(
                             }
 
                             if parse_anthropic_sse_line(&line, on_token, &mut output)? {
-                                return Ok(output);
+                                message_stop_received = true;
+                                break 'outer;
                             }
                         }
                     }
@@ -400,6 +394,12 @@ async fn stream_anthropic_sse(
                 }
             }
         }
+    }
+
+    if !message_stop_received {
+        return Err(AppError::Http(
+            "Stream ended without completion signal — connection may have been interrupted. Please retry.".to_string(),
+        ));
     }
 
     Ok(output)
@@ -428,10 +428,7 @@ fn parse_anthropic_sse_line(
     };
     let payload = payload.trim();
 
-    let value: Value = match serde_json::from_str(payload) {
-        Ok(v) => v,
-        Err(_) => return Ok(false),
-    };
+    let value: Value = serde_json::from_str(payload)?;
 
     let event_type = value.get("type").and_then(Value::as_str).unwrap_or("");
 
