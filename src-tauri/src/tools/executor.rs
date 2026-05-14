@@ -331,7 +331,7 @@ impl ToolExecutor {
         let query = input["query"]
             .as_str()
             .ok_or_else(|| AppError::Validation("Missing 'query' field".to_string()))?;
-        let client = reqwest::Client::new();
+        let client = crate::services::http_client::request_client()?;
         let url = format!(
             "https://api.duckduckgo.com/?q={}&format=json&no_html=1&skip_disambig=1",
             urlencoding::encode(query)

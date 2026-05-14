@@ -1076,7 +1076,7 @@ impl AgentRunner {
             "stream": true,
         });
 
-        let client = reqwest::Client::new();
+        let client = crate::services::http_client::streaming_client()?;
         let mut request = client
             .post(endpoint)
             .header(CONTENT_TYPE, "application/json")
@@ -1118,7 +1118,7 @@ impl AgentRunner {
             payload["system"] = Value::String(system_prompt);
         }
 
-        let client = reqwest::Client::new();
+        let client = crate::services::http_client::streaming_client()?;
         let mut request = client
             .post("https://api.anthropic.com/v1/messages")
             .header(CONTENT_TYPE, "application/json")
