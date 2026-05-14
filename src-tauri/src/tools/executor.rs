@@ -301,8 +301,15 @@ impl ToolExecutor {
             sh_process
         };
 
+        let safe_path = std::env::var("PATH")
+            .unwrap_or_else(|_| "/usr/local/bin:/usr/bin:/bin".to_string());
+
         command
             .current_dir(&self.sandbox)
+            .env_clear()
+            .env("PATH", safe_path)
+            .env("LANG", std::env::var("LANG").unwrap_or_else(|_| "en_US.UTF-8".to_string()))
+            .env("LC_ALL", std::env::var("LC_ALL").unwrap_or_else(|_| "en_US.UTF-8".to_string()))
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .kill_on_drop(true);
@@ -792,6 +799,30 @@ mod tests {
         );
 
         cleanup("run_cmd_invalid");
+    }
+
+    #[tokio::test]
+    async fn test_run_command_env_isolation() {
+        let sandbox_path = with_sandbox("run_cmd_env_isolation");
+
+        std::env::set_var("ENOWX_SECRET_TEST_VAR", "super_secret_value");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::RunCommand,
+            input: serde_json::json!({ "command": "echo ${ENOWX_SECRET_TEST_VAR:-empty}" }),
+        };
+        let result = executor.execute(call).await;
+        assert!(!result.is_error, "command should succeed: {}", result.output);
+        assert!(
+            !result.output.contains("super_secret_value"),
+            "parent env vars must not leak into agent commands, got: {}",
+            result.output
+        );
+
+        std::env::remove_var("ENOWX_SECRET_TEST_VAR");
+        cleanup("run_cmd_env_isolation");
     }
 
     #[tokio::test]
