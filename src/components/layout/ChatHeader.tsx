@@ -25,9 +25,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({ onToggleLeftSidebar }) =
   const mainView = useUIStore((s) => s.mainView);
   const setMainView = useUIStore((s) => s.setMainView);
   const { activeProjectId } = useProjectStore();
+  const sessionUsage = useChatStore((s) => s.sessionUsage);
 
   const { theme, toggleTheme } = useUIStore();
   const activeSession = sessions.find(s => s.id === activeSessionId);
+  const currentUsage = activeSessionId ? sessionUsage[activeSessionId] : undefined;
+
+  const formatTokens = (n: number) =>
+    n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
@@ -164,6 +169,14 @@ export const ChatHeader: React.FC<ChatHeaderProps> = ({ onToggleLeftSidebar }) =
               >
                 <PencilSimple size={14} />
               </button>
+            )}
+            {currentUsage && (
+              <span
+                className="text-[10px] font-medium px-1.5 py-0.5 rounded-md bg-[var(--surface-2)] text-[var(--text-muted)] border border-[var(--border)] whitespace-nowrap"
+                title={`↑ ${formatTokens(currentUsage.promptTokens)} prompt · ↓ ${formatTokens(currentUsage.completionTokens)} completion`}
+              >
+                {formatTokens(currentUsage.totalTokens)} tokens
+              </span>
             )}
           </>
         )}

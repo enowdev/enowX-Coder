@@ -14,6 +14,42 @@ use crate::{
 
 use super::{now_rfc3339, provider_service};
 
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TokenUsage {
+    pub prompt_tokens: u32,
+    pub completion_tokens: u32,
+    pub total_tokens: u32,
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct ChatUsageEvent {
+    session_id: String,
+    usage: TokenUsage,
+}
+
+#[derive(Debug, Default)]
+struct UsageAccumulator {
+    prompt_tokens: u32,
+    completion_tokens: u32,
+}
+
+impl UsageAccumulator {
+    fn finish(self) -> Option<TokenUsage> {
+        let total = self.prompt_tokens + self.completion_tokens;
+        if total == 0 {
+            None
+        } else {
+            Some(TokenUsage {
+                prompt_tokens: self.prompt_tokens,
+                completion_tokens: self.completion_tokens,
+                total_tokens: total,
+            })
+        }
+    }
+}
+
 pub async fn get_messages(db: &SqlitePool, session_id: &str) -> AppResult<Vec<Message>> {
     let messages = sqlx::query_as::<_, Message>(
         "SELECT id, session_id, role, content, created_at FROM messages \
@@ -118,7 +154,7 @@ async fn send_message_inner(
     // Use caller-supplied model_id if provided, otherwise fall back to provider default
     let model = model_id.unwrap_or(&provider.model);
 
-    let assistant_output = if provider.provider_type == "anthropic" {
+    let (assistant_output, token_usage) = if provider.provider_type == "anthropic" {
         send_anthropic(history, model, provider.api_key.as_deref(), &on_token, &cancel_token).await?
     } else {
         send_openai_compatible(
@@ -131,6 +167,13 @@ async fn send_message_inner(
         )
         .await?
     };
+
+    if let Some(usage) = token_usage {
+        let _ = app_handle.emit("chat-usage", ChatUsageEvent {
+            session_id: session_id.to_string(),
+            usage,
+        });
+    }
 
     let assistant_message = Message {
         id: Uuid::new_v4().to_string(),
@@ -162,7 +205,7 @@ async fn send_openai_compatible(
     history: Vec<Message>,
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
-) -> AppResult<String> {
+) -> AppResult<(String, Option<TokenUsage>)> {
     let client = reqwest::Client::new();
     let endpoint = format!("{}/chat/completions", base_url.trim_end_matches('/'));
 
@@ -178,6 +221,7 @@ async fn send_openai_compatible(
         "presence_penalty": 0.0,
         "frequency_penalty": 0.0,
         "stream": true,
+        "stream_options": { "include_usage": true },
     });
 
     let system_instructions = concat!(
@@ -230,7 +274,7 @@ async fn send_anthropic(
     api_key: Option<&str>,
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
-) -> AppResult<String> {
+) -> AppResult<(String, Option<TokenUsage>)> {
     let client = reqwest::Client::new();
 
     let (system_msgs, chat_msgs): (Vec<_>, Vec<_>) =
@@ -289,10 +333,11 @@ async fn stream_openai_sse(
     response: reqwest::Response,
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
-) -> AppResult<String> {
+) -> AppResult<(String, Option<TokenUsage>)> {
     let mut stream = response.bytes_stream();
     let mut line_buffer = String::new();
     let mut output = String::new();
+    let mut usage = UsageAccumulator::default();
 
     loop {
         tokio::select! {
@@ -311,8 +356,8 @@ async fn stream_openai_sse(
                                 line.pop();
                             }
 
-                            if parse_openai_sse_line(&line, on_token, &mut output)? {
-                                return Ok(output);
+                            if parse_openai_sse_line(&line, on_token, &mut output, &mut usage)? {
+                                return Ok((output, usage.finish()));
                             }
                         }
                     }
@@ -324,16 +369,17 @@ async fn stream_openai_sse(
     }
 
     if !line_buffer.is_empty() {
-        parse_openai_sse_line(&line_buffer, on_token, &mut output)?;
+        parse_openai_sse_line(&line_buffer, on_token, &mut output, &mut usage)?;
     }
 
-    Ok(output)
+    Ok((output, usage.finish()))
 }
 
 fn parse_openai_sse_line(
     line: &str,
     on_token: &Channel<String>,
     output: &mut String,
+    usage: &mut UsageAccumulator,
 ) -> AppResult<bool> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -349,6 +395,16 @@ fn parse_openai_sse_line(
     }
 
     let value: Value = serde_json::from_str(payload)?;
+
+    if let Some(u) = value.get("usage") {
+        if let Some(pt) = u.get("prompt_tokens").and_then(Value::as_u64) {
+            usage.prompt_tokens = pt as u32;
+        }
+        if let Some(ct) = u.get("completion_tokens").and_then(Value::as_u64) {
+            usage.completion_tokens = ct as u32;
+        }
+    }
+
     if let Some(token) = value
         .get("choices")
         .and_then(Value::as_array)
@@ -368,12 +424,14 @@ async fn stream_anthropic_sse(
     response: reqwest::Response,
     on_token: &Channel<String>,
     cancel_token: &CancellationToken,
-) -> AppResult<String> {
+) -> AppResult<(String, Option<TokenUsage>)> {
     let mut stream = response.bytes_stream();
     let mut line_buffer = String::new();
     let mut output = String::new();
+    let mut usage = UsageAccumulator::default();
+    let mut message_stop_received = false;
 
-    loop {
+    'outer: loop {
         tokio::select! {
             _ = cancel_token.cancelled() => {
                 return Err(AppError::Cancelled);
@@ -390,8 +448,9 @@ async fn stream_anthropic_sse(
                                 line.pop();
                             }
 
-                            if parse_anthropic_sse_line(&line, on_token, &mut output)? {
-                                return Ok(output);
+                            if parse_anthropic_sse_line(&line, on_token, &mut output, &mut usage)? {
+                                message_stop_received = true;
+                                break 'outer;
                             }
                         }
                     }
@@ -402,13 +461,20 @@ async fn stream_anthropic_sse(
         }
     }
 
-    Ok(output)
+    if !message_stop_received {
+        return Err(AppError::Http(
+            "Stream ended without completion signal — connection may have been interrupted. Please retry.".to_string(),
+        ));
+    }
+
+    Ok((output, usage.finish()))
 }
 
 fn parse_anthropic_sse_line(
     line: &str,
     on_token: &Channel<String>,
     output: &mut String,
+    usage: &mut UsageAccumulator,
 ) -> AppResult<bool> {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -436,6 +502,25 @@ fn parse_anthropic_sse_line(
     let event_type = value.get("type").and_then(Value::as_str).unwrap_or("");
 
     match event_type {
+        "message_start" => {
+            if let Some(pt) = value
+                .get("message")
+                .and_then(|m| m.get("usage"))
+                .and_then(|u| u.get("input_tokens"))
+                .and_then(Value::as_u64)
+            {
+                usage.prompt_tokens = pt as u32;
+            }
+        }
+        "message_delta" => {
+            if let Some(ct) = value
+                .get("usage")
+                .and_then(|u| u.get("output_tokens"))
+                .and_then(Value::as_u64)
+            {
+                usage.completion_tokens = ct as u32;
+            }
+        }
         "content_block_delta" => {
             if let Some(token) = value
                 .get("delta")
