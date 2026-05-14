@@ -1,3 +1,8 @@
+// serde_json::json! macro internally uses .unwrap() in its expansion.
+// This module uses json! extensively for OpenAI API payloads — allowing at module level
+// to avoid repetitive per-call annotations. Manual unwrap/expect calls are still forbidden.
+#![allow(clippy::disallowed_methods)]
+
 use futures_util::StreamExt;
 use reqwest::header::{AUTHORIZATION, CONTENT_TYPE};
 use serde_json::Value;
