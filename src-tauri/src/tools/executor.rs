@@ -307,23 +307,61 @@ impl ToolExecutor {
             .stderr(Stdio::piped())
             .kill_on_drop(true);
 
-        let child = command.spawn().map_err(AppError::from)?;
+        // On Unix, place the child in its own process group so we can kill any
+        // descendants the shell backgrounds. Without this, a command like
+        // `sh -c "sleep 60 &"` orphans the sleep when sh exits or is killed —
+        // it survives the timeout and continues to run with the agent's privileges.
+        #[cfg(unix)]
+        command.process_group(0);
 
-        match tokio::time::timeout(self.command_timeout, child.wait_with_output()).await {
-            Ok(Ok(output)) => {
-                let stdout = String::from_utf8_lossy(&output.stdout);
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                let exit_code = output.status.code().unwrap_or(-1);
+        let mut child = command.spawn().map_err(AppError::from)?;
+
+        // Capture the leader pid before wait_with_output consumes it. This is the
+        // process group ID since we requested process_group(0).
+        #[cfg(unix)]
+        let pgid = child.id().map(|id| id as i32);
+
+        let stdout_pipe = child.stdout.take();
+        let stderr_pipe = child.stderr.take();
+
+        let wait_future = async move {
+            let mut stdout_buf = Vec::new();
+            let mut stderr_buf = Vec::new();
+            if let Some(mut out) = stdout_pipe {
+                let _ = tokio::io::AsyncReadExt::read_to_end(&mut out, &mut stdout_buf).await;
+            }
+            if let Some(mut err) = stderr_pipe {
+                let _ = tokio::io::AsyncReadExt::read_to_end(&mut err, &mut stderr_buf).await;
+            }
+            let status = child.wait().await?;
+            Ok::<_, std::io::Error>((status, stdout_buf, stderr_buf))
+        };
+
+        match tokio::time::timeout(self.command_timeout, wait_future).await {
+            Ok(Ok((status, stdout, stderr))) => {
+                let stdout = String::from_utf8_lossy(&stdout);
+                let stderr = String::from_utf8_lossy(&stderr);
+                let exit_code = status.code().unwrap_or(-1);
                 Ok(format!(
                     "exit_code: {}\nstdout:\n{}\nstderr:\n{}",
                     exit_code, stdout, stderr
                 ))
             }
             Ok(Err(error)) => Err(AppError::from(error)),
-            Err(_) => Err(AppError::Internal(format!(
-                "Command timed out after {}s",
-                self.command_timeout.as_secs()
-            ))),
+            Err(_) => {
+                #[cfg(unix)]
+                if let Some(pgid) = pgid {
+                    // Kill the entire process group so backgrounded descendants don't survive.
+                    // SAFETY: killpg with a valid pgid we just spawned is a safe syscall.
+                    unsafe {
+                        libc::killpg(pgid, libc::SIGKILL);
+                    }
+                }
+                Err(AppError::Internal(format!(
+                    "Command timed out after {}s",
+                    self.command_timeout.as_secs()
+                )))
+            }
         }
     }
 
@@ -823,6 +861,41 @@ mod tests {
         );
 
         cleanup("run_cmd_timeout");
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_run_command_timeout_kills_backgrounded_children() {
+        // Regression: with only kill_on_drop on the parent shell, a command like
+        // `sh -c "sleep 60 &"` orphans the sleep when sh exits or is killed —
+        // the descendant survives the timeout and continues running with the
+        // agent's privileges. The fix puts the child in its own process group
+        // and killpg's the whole group on timeout.
+        let sandbox_path = with_sandbox("run_cmd_orphan");
+        let proof = sandbox_path.join("orphan_proof.txt");
+        let proof_str = proof.to_string_lossy().to_string();
+
+        let mut executor = ToolExecutor::new(sandbox_path);
+        executor.command_timeout = Duration::from_millis(300);
+
+        let call = ToolCall {
+            tool: ToolName::RunCommand,
+            input: serde_json::json!({
+                "command": format!("(sleep 3 && echo orphan > '{}') &", proof_str),
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(result.is_error, "timeout should trigger error");
+
+        // Wait long enough that the orphan WOULD have written its file if it survived.
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        assert!(
+            !proof.exists(),
+            "backgrounded descendant must be killed with the process group, but it wrote: {}",
+            proof.display()
+        );
+
+        cleanup("run_cmd_orphan");
     }
 
     // ── validate_path edge cases ─────────────────────────────────────────────

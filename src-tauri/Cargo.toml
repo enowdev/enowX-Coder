@@ -36,6 +36,9 @@ globset = "0.4"
 regex = "1"
 urlencoding = "2"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [profile.release]
 opt-level = 3
 lto = true
