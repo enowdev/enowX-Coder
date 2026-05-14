@@ -16,11 +16,11 @@ import { useUIStore } from '@/stores/useUIStore';
 import { useAgentStore } from '@/stores/useAgentStore';
 import { SettingsModal } from '@/components/settings/SettingsModal';
 import { ExcalidrawCanvas } from '@/components/canvas/ExcalidrawCanvas';
-import { AgentConfig, AgentRunWithTools, AgentType, Message, PermissionRequest, Project, Provider, ProviderModelConfig, Session, ToolCall } from '@/types';
+import { AgentConfig, AgentRunWithTools, AgentType, ChatUsageEvent, Message, PermissionRequest, Project, Provider, ProviderModelConfig, Session, ToolCall } from '@/types';
 import { cn } from '@/lib/utils';
 
 export const AppShell: React.FC = () => {
-  const { addMessage, appendStreamToken, setStreaming, clearStreaming, setMessages } = useChatStore();
+  const { addMessage, appendStreamToken, setStreaming, clearStreaming, setMessages, addTokenUsage } = useChatStore();
   const setProjects = useProjectStore((s) => s.setProjects);
   const addProject = useProjectStore((s) => s.addProject);
   const setActiveProjectId = useProjectStore((s) => s.setActiveProjectId);
@@ -181,6 +181,10 @@ export const AppShell: React.FC = () => {
         clearStreaming();
       });
 
+      const unlistenChatUsage = await listen<ChatUsageEvent>('chat-usage', (event) => {
+        addTokenUsage(event.payload.sessionId, event.payload.usage);
+      });
+
       const unlistenAgentStarted = await listen<{
         agentRunId: string;
         agentType: string;
@@ -325,6 +329,7 @@ export const AppShell: React.FC = () => {
       localUnlisten.push(
         unlistenChatDone,
         unlistenChatError,
+        unlistenChatUsage,
         unlistenAgentStarted,
         unlistenAgentToken,
         unlistenAgentToolCall,
