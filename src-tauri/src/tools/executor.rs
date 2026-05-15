@@ -147,7 +147,31 @@ impl ToolExecutor {
             })?
             .to_path_buf();
         let normalized_rel = Self::normalize_relative(&rel_from_sandbox)?;
-        Ok(sandbox_canonical.join(normalized_rel))
+        let candidate = sandbox_canonical.join(&normalized_rel);
+
+        // Resolve the deepest existing ancestor through symlinks. This prevents an
+        // attacker from creating a symlink inside the sandbox (e.g. evil -> /etc) and
+        // then writing to evil/newfile, where the leaf does not exist but the parent
+        // is a symlink that escapes the sandbox.
+        let mut ancestor = candidate.as_path();
+        loop {
+            if ancestor.exists() {
+                let canonical_ancestor = ancestor.canonicalize().map_err(AppError::from)?;
+                if !canonical_ancestor.starts_with(&sandbox_canonical) {
+                    return Err(AppError::Validation(format!(
+                        "Path '{}' is outside project sandbox",
+                        requested
+                    )));
+                }
+                break;
+            }
+            match ancestor.parent() {
+                Some(parent) => ancestor = parent,
+                None => break,
+            }
+        }
+
+        Ok(candidate)
     }
 
     fn is_sensitive_file(&self, path: &Path) -> bool {
@@ -601,6 +625,47 @@ mod tests {
         );
 
         cleanup("path_traversal_abs");
+    }
+
+    #[tokio::test]
+    #[cfg(unix)]
+    async fn test_symlink_parent_escape_rejected() {
+        // Regression: an attacker creates a symlink inside the sandbox pointing to a
+        // privileged directory (e.g. evil -> /tmp), then attempts to write a NEW file
+        // through that symlink. The leaf does not exist, so the original validate_path
+        // skipped canonicalization and tokio::fs::write happily followed the symlink,
+        // letting the agent write outside the sandbox.
+        let sandbox_path = with_sandbox("symlink_parent_escape");
+        let outside = PathBuf::from("/tmp").join("enowx-test-symlink-target");
+        tokio::fs::create_dir_all(&outside)
+            .await
+            .expect("create outside dir");
+
+        std::os::unix::fs::symlink(&outside, sandbox_path.join("evil"))
+            .expect("create symlink");
+
+        let executor = ToolExecutor::new(sandbox_path);
+
+        let call = ToolCall {
+            tool: ToolName::WriteFile,
+            input: serde_json::json!({
+                "path": "evil/pwned.txt",
+                "content": "should not land outside sandbox",
+            }),
+        };
+        let result = executor.execute(call).await;
+        assert!(
+            result.is_error,
+            "write through symlinked parent must be rejected, got: {}",
+            result.output
+        );
+        assert!(
+            !outside.join("pwned.txt").exists(),
+            "file must not have been written outside sandbox"
+        );
+
+        let _ = tokio::fs::remove_dir_all(&outside).await;
+        cleanup("symlink_parent_escape");
     }
 
     #[tokio::test]
