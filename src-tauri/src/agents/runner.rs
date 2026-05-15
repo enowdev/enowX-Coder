@@ -25,6 +25,18 @@ const SYNTHESIS_REACT_ITERATIONS: usize = 8;
 const LANGUAGE_GUARD: &str =
     "IMPORTANT: Reply using the same language as the user's latest message. If user writes Indonesian, answer in Indonesian. Never switch to another language unless the user explicitly asks you to.";
 
+/// Short hint appended when flux is enabled but user didn't ask for visuals (~50 tokens vs ~4500)
+const PREVIEW_HINT: &str = "You can create interactive visualizations (charts, diagrams, widgets) by outputting a fenced code block with the language tag `html:preview`. The preview iframe has a full design system pre-loaded with CSS variables, SVG color ramp classes, and light/dark mode support. Use this when the user asks for any visual or interactive content.";
+
+/// Keywords that trigger the full PREVIEW_GUIDE injection
+const VISUAL_KEYWORDS: &[&str] = &[
+    "chart", "diagram", "graph", "visuali", "svg", "plot", "widget",
+    "mockup", "wireframe", "flowchart", "draw", "gambar", "buat grafik",
+    "bikin chart", "bikin diagram", "buatkan", "tampilkan", "tabel",
+    "html:preview", "interactive", "infographic", "dashboard", "canvas",
+    "pie chart", "bar chart", "line chart", "perbandingan", "statistik",
+];
+
 const PREVIEW_GUIDE: &str = r#"INTERACTIVE PREVIEW — VISUAL CREATION SYSTEM
 
 When the user asks for a visualization, diagram, chart, interactive demo, UI mockup, or any visual/interactive HTML content, output it directly in your response as a fenced code block with the language tag `html:preview`. Do NOT use write_file — the app renders it as a live interactive preview inline. Only use write_file when the user explicitly asks to save a file on disk.
@@ -586,8 +598,14 @@ impl AgentRunner {
         let model = ctx.model_id.unwrap_or(&provider.model);
         let tool_executor = ToolExecutor::new(PathBuf::from(ctx.project_path));
 
+        // Solusi 1: Lazy PREVIEW_GUIDE — only inject full guide when user asks for visuals
         let system_content = if ctx.flux_enabled {
-            format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_GUIDE)
+            if needs_full_preview_guide(ctx.task) {
+                format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_GUIDE)
+            } else {
+                // Mini hint only (~50 tokens vs ~4500)
+                format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_HINT)
+            }
         } else {
             format!("{}\n\n{}", system_prompt, LANGUAGE_GUARD)
         };
@@ -722,7 +740,11 @@ impl AgentRunner {
         let tool_executor = ToolExecutor::new(PathBuf::from(ctx.project_path));
 
         let system_content = if ctx.flux_enabled {
-            format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_GUIDE)
+            if needs_full_preview_guide(ctx.task) {
+                format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_GUIDE)
+            } else {
+                format!("{}\n\n{}\n\n{}", system_prompt, LANGUAGE_GUARD, PREVIEW_HINT)
+            }
         } else {
             format!("{}\n\n{}", system_prompt, LANGUAGE_GUARD)
         };
@@ -772,9 +794,11 @@ impl AgentRunner {
                 return Err(AppError::Cancelled);
             }
 
-            let turn = if provider.provider_type == "anthropic" {
+            let turn = if provider.uses_anthropic_format() {
                 self.send_anthropic_with_tools(
+                    &provider.base_url,
                     &provider.api_key,
+                    &provider.provider_type,
                     model,
                     messages,
                     agent_run_id,
@@ -819,9 +843,12 @@ impl AgentRunner {
                     )
                     .await?;
 
+                // Solusi 3: Truncate large tool results to reduce token accumulation
+                let truncated_output = truncate_tool_result(&execution.output);
+
                 messages.push(ConversationMessage::tool(
                     &tool_call.id,
-                    &execution.output,
+                    &truncated_output,
                     execution.is_error,
                 ));
             }
@@ -1092,47 +1119,129 @@ impl AgentRunner {
             .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn send_anthropic_with_tools<S: TokenSink + Sync>(
         &self,
+        base_url: &str,
         api_key: &Option<String>,
+        provider_type: &str,
         model: &str,
         messages: &[ConversationMessage],
         agent_run_id: &str,
         token_sink: &S,
     ) -> AppResult<LLMTurn> {
-        let (system, anthropic_messages) = to_anthropic_messages(messages)?;
+        let (system, mut anthropic_messages) = to_anthropic_messages(messages)?;
+
+        // Prompt caching: mark last user message with cache_control (like Claude Desktop)
+        if let Some(last_msg) = anthropic_messages.last_mut() {
+            if last_msg.get("role").and_then(Value::as_str) == Some("user") {
+                if let Some(content) = last_msg.get_mut("content").and_then(Value::as_array_mut) {
+                    if let Some(last_block) = content.last_mut() {
+                        last_block["cache_control"] = json!({"type": "ephemeral"});
+                    }
+                }
+            }
+        }
+
+        // Prompt caching: tools cached
+        let tools_with_cache = {
+            let mut tools = anthropic_tool_definitions();
+            if let Some(last_tool) = tools.last_mut() {
+                last_tool["cache_control"] = json!({"type": "ephemeral"});
+            }
+            tools
+        };
+
         let mut payload = json!({
             "model": model,
             "max_tokens": 8096,
             "messages": anthropic_messages,
-            "tools": anthropic_tool_definitions(),
+            "tools": tools_with_cache,
             "stream": true,
         });
 
+        // System prompt as cached content block array
         if let Some(system_prompt) = system {
-            payload["system"] = Value::String(system_prompt);
+            payload["system"] = json!([
+                {
+                    "type": "text",
+                    "text": system_prompt,
+                    "cache_control": {"type": "ephemeral"}
+                }
+            ]);
         }
+
+        // Resolve endpoint: same logic as chat_service::send_anthropic
+        let endpoint = if provider_type == "anthropic" {
+            "https://api.anthropic.com/v1/messages".to_string()
+        } else if provider_type == "enowxlabs" {
+            format!("{}/messages", base_url.trim_end_matches('/').trim_end_matches("/v1"))
+        } else {
+            // Custom gateway: preserve full base_url path (e.g. /v1/messages)
+            format!("{}/messages", base_url.trim_end_matches('/'))
+        };
 
         let client = reqwest::Client::new();
         let mut request = client
-            .post("https://api.anthropic.com/v1/messages")
+            .post(&endpoint)
             .header(CONTENT_TYPE, "application/json")
             .header("anthropic-version", "2023-06-01")
-            .json(&payload);
+            .header("anthropic-beta", "prompt-caching-2024-07-31");
 
+        // Auth: x-api-key for Anthropic direct, Bearer for gateways
         if let Some(key) = api_key.as_deref().filter(|k| !k.trim().is_empty()) {
-            request = request.header("x-api-key", key);
+            if provider_type == "anthropic" {
+                request = request.header("x-api-key", key);
+            } else {
+                request = request.header(AUTHORIZATION, format!("Bearer {key}"));
+            }
         }
 
-        let response = request.send().await?;
+        let response = request.json(&payload).send().await?;
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
             return Err(AppError::Http(format!("Anthropic {status}: {body}")));
         }
 
-        self.stream_anthropic_tool_sse(response, agent_run_id, token_sink)
-            .await
+        let turn = self
+            .stream_anthropic_tool_sse(response, agent_run_id, token_sink)
+            .await?;
+
+        // Fallback: some gateways return message_start → message_stop without
+        // any content_block events when streaming certain models.  When that
+        // happens, retry the request with `stream: false` and parse the full
+        // response synchronously.
+        if turn.text.is_empty() && turn.tool_calls.is_empty() {
+            log::warn!("anthropic stream returned empty — retrying non-streaming");
+            payload["stream"] = json!(false);
+
+            let mut retry_req = client
+                .post(&endpoint)
+                .header(CONTENT_TYPE, "application/json")
+                .header("anthropic-version", "2023-06-01")
+                .json(&payload);
+
+            if let Some(key) = api_key.as_deref().filter(|k| !k.trim().is_empty()) {
+                if provider_type == "anthropic" {
+                    retry_req = retry_req.header("x-api-key", key);
+                } else {
+                    retry_req = retry_req.header(AUTHORIZATION, format!("Bearer {key}"));
+                }
+            }
+
+            let retry_resp = retry_req.send().await?;
+            if !retry_resp.status().is_success() {
+                let status = retry_resp.status();
+                let body = retry_resp.text().await.unwrap_or_default();
+                return Err(AppError::Http(format!("Anthropic non-stream {status}: {body}")));
+            }
+
+            let body: Value = retry_resp.json().await?;
+            return parse_anthropic_non_stream_response(&body, agent_run_id, token_sink, &self.app_handle);
+        }
+
+        Ok(turn)
     }
 
     async fn stream_openai_tool_sse<S: TokenSink + Sync>(
@@ -1292,6 +1401,9 @@ impl AgentRunner {
         let mut output = String::new();
         let mut stop_reason: Option<String> = None;
         let mut pending_calls: HashMap<usize, StreamingToolCall> = HashMap::new();
+        // Track the most recent `event:` line so we can fall back to it when
+        // the JSON payload omits the top-level `"type"` field (some gateways).
+        let mut current_event = String::new();
 
         while let Some(chunk) = stream.next().await {
             line_buffer.push_str(&String::from_utf8_lossy(&chunk?));
@@ -1305,6 +1417,7 @@ impl AgentRunner {
 
                 let should_stop = self.parse_anthropic_sse_line(
                     &line,
+                    &mut current_event,
                     agent_run_id,
                     token_sink,
                     &mut output,
@@ -1325,6 +1438,7 @@ impl AgentRunner {
     fn parse_anthropic_sse_line<S: TokenSink + Sync>(
         &self,
         line: &str,
+        current_event: &mut String,
         agent_run_id: &str,
         token_sink: &S,
         output: &mut String,
@@ -1337,7 +1451,9 @@ impl AgentRunner {
         }
 
         if let Some(event_name) = trimmed.strip_prefix("event:") {
-            if event_name.trim() == "message_stop" {
+            let event_name = event_name.trim();
+            *current_event = event_name.to_string();
+            if event_name == "message_stop" {
                 return Ok(true);
             }
             return Ok(false);
@@ -1353,7 +1469,12 @@ impl AgentRunner {
             Err(_) => return Ok(false),
         };
 
-        let event_type = value.get("type").and_then(Value::as_str).unwrap_or_default();
+        // Prefer `"type"` from JSON payload; fall back to the preceding
+        // `event:` line when the gateway strips it.
+        let event_type = value
+            .get("type")
+            .and_then(Value::as_str)
+            .unwrap_or(current_event.as_str());
 
         match event_type {
             "content_block_start" => {
@@ -1488,6 +1609,51 @@ struct StreamingToolCall {
     id: String,
     name: String,
     arguments: String,
+}
+
+/// Parse a non-streaming Anthropic Messages API response into an `LLMTurn`.
+///
+/// Used as a fallback when the gateway returns an empty stream (some proxies
+/// don't support streaming for certain models).
+fn parse_anthropic_non_stream_response<S: TokenSink + Sync>(
+    body: &Value,
+    agent_run_id: &str,
+    token_sink: &S,
+    app_handle: &tauri::AppHandle,
+) -> AppResult<LLMTurn> {
+    let mut text = String::new();
+    let mut tool_calls = Vec::new();
+
+    if let Some(content) = body.get("content").and_then(Value::as_array) {
+        for block in content {
+            let block_type = block.get("type").and_then(Value::as_str).unwrap_or("");
+            match block_type {
+                "text" => {
+                    if let Some(t) = block.get("text").and_then(Value::as_str) {
+                        text.push_str(t);
+                        // Send tokens to UI so the user sees the response
+                        token_sink.send(t);
+                        let _ = app_handle.emit(
+                            "agent-token",
+                            AgentTokenEvent {
+                                agent_run_id: agent_run_id.to_string(),
+                                token: t.to_string(),
+                            },
+                        );
+                    }
+                }
+                "tool_use" => {
+                    let id = block.get("id").and_then(Value::as_str).unwrap_or("").to_string();
+                    let name = block.get("name").and_then(Value::as_str).unwrap_or("").to_string();
+                    let input = block.get("input").cloned().unwrap_or(Value::Object(Default::default()));
+                    tool_calls.push(ParsedToolCall { id, name, input });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    Ok(LLMTurn { text, tool_calls })
 }
 
 #[derive(Debug, Clone)]
@@ -1682,6 +1848,35 @@ fn summarize_html_widget(html: &str) -> String {
     }
 
     summary
+}
+
+/// Truncate tool results to prevent token bloat in ReAct loop.
+/// File contents and large outputs are capped; short results pass through unchanged.
+const MAX_TOOL_RESULT_CHARS: usize = 3000;
+
+fn truncate_tool_result(output: &str) -> String {
+    if output.len() <= MAX_TOOL_RESULT_CHARS {
+        return output.to_string();
+    }
+
+    // Keep first and last portions for context
+    let head_size = MAX_TOOL_RESULT_CHARS * 2 / 3; // ~2000 chars from start
+    let tail_size = MAX_TOOL_RESULT_CHARS / 3;      // ~1000 chars from end
+
+    let head = &output[..head_size];
+    let tail = &output[output.len() - tail_size..];
+    let omitted = output.len() - head_size - tail_size;
+
+    format!(
+        "{}\n\n… [{} chars omitted] …\n\n{}",
+        head, omitted, tail
+    )
+}
+
+/// Check if the user's message contains keywords that need the full PREVIEW_GUIDE
+fn needs_full_preview_guide(task: &str) -> bool {
+    let lower = task.to_lowercase();
+    VISUAL_KEYWORDS.iter().any(|kw| lower.contains(kw))
 }
 
 fn finalize_llm_turn(

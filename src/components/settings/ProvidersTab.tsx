@@ -170,6 +170,7 @@ export const ProvidersTab: React.FC = () => {
   const [newBaseUrl, setNewBaseUrl] = useState('');
   const [newApiKey, setNewApiKey] = useState('');
   const [newModel, setNewModel] = useState('');
+  const [newApiFormat, setNewApiFormat] = useState<'openai' | 'anthropic'>('openai');
   const [newSaving, setNewSaving] = useState(false);
   const [newError, setNewError] = useState<string | null>(null);
 
@@ -411,12 +412,13 @@ export const ProvidersTab: React.FC = () => {
         baseUrl: newBaseUrl.trim(),
         apiKey: newApiKey.trim() || null,
         model: newModel.trim(),
+        apiFormat: newApiFormat,
       });
       await loadProviders();
       // Select the new provider
       setSelectedType(created.providerType as ProviderType);
       setAddingNew(false);
-      setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setNewModel('');
+      setNewName(''); setNewBaseUrl(''); setNewApiKey(''); setNewModel(''); setNewApiFormat('openai');
     } catch (e) {
       const msg = typeof e === 'string' ? e : (e as Error)?.message ?? 'Failed to create provider';
       setNewError(msg);
@@ -603,6 +605,39 @@ export const ProvidersTab: React.FC = () => {
                   <p className="text-[9px] text-[var(--text-subtle)] mt-1">The model identifier used for API requests</p>
                 </div>
 
+                <div>
+                  <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">API Format</label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewApiFormat('openai')}
+                      className={cn(
+                        'flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors',
+                        newApiFormat === 'openai'
+                          ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+                          : 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--focus-border)]'
+                      )}
+                    >
+                      OpenAI
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewApiFormat('anthropic')}
+                      className={cn(
+                        'flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors',
+                        newApiFormat === 'anthropic'
+                          ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+                          : 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--focus-border)]'
+                      )}
+                    >
+                      Anthropic
+                    </button>
+                  </div>
+                  <p className="text-[9px] text-[var(--text-subtle)] mt-1">
+                    Choose Anthropic for Claude-compatible gateways (enables prompt caching &amp; lower token usage)
+                  </p>
+                </div>
+
                 {newError && (
                   <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-[var(--danger-bg)] border border-[var(--danger-border)]">
                     <X size={14} className="text-[var(--danger)] shrink-0" />
@@ -749,6 +784,47 @@ export const ProvidersTab: React.FC = () => {
                   )}
                 </div>
                 <p className="text-[9px] text-[var(--text-subtle)] mt-1">The model identifier used for API requests</p>
+              </div>
+            )}
+
+            {/* API Format — for custom providers */}
+            {!FIXED_BASE_URL[selectedType] && selectedProvider && (
+              <div>
+                <label className="block text-[11px] font-semibold text-[var(--text-muted)] mb-1.5">API Format</label>
+                <div className="flex gap-2">
+                  {(['openai', 'anthropic'] as const).map((fmt) => (
+                    <button
+                      key={fmt}
+                      type="button"
+                      onClick={async () => {
+                        try {
+                          await invoke('update_provider', {
+                            id: selectedProvider.id,
+                            name: selectedProvider.name,
+                            baseUrl: selectedProvider.baseUrl,
+                            apiKey: selectedProvider.apiKey ?? null,
+                            model: selectedProvider.model,
+                            apiFormat: fmt,
+                          });
+                          await loadProviders();
+                        } catch (e) {
+                          console.error('update api_format error:', e);
+                        }
+                      }}
+                      className={cn(
+                        'flex-1 px-3 py-2 rounded-lg text-xs font-medium border transition-colors',
+                        selectedProvider.apiFormat === fmt
+                          ? 'bg-[var(--accent)] text-[var(--accent-fg)] border-[var(--accent)]'
+                          : 'bg-[var(--surface-2)] text-[var(--text-muted)] border-[var(--border)] hover:border-[var(--focus-border)]'
+                      )}
+                    >
+                      {fmt === 'openai' ? 'OpenAI' : 'Anthropic'}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9px] text-[var(--text-subtle)] mt-1">
+                  Choose Anthropic for Claude-compatible gateways (enables prompt caching &amp; lower token usage)
+                </p>
               </div>
             )}
 

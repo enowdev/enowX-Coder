@@ -15,6 +15,7 @@ pub async fn create_provider(
     base_url: String,
     api_key: Option<String>,
     model: String,
+    api_format: Option<String>,
 ) -> AppResult<Provider> {
     provider_service::create_provider(
         state.pool(),
@@ -23,6 +24,7 @@ pub async fn create_provider(
         &base_url,
         api_key.as_deref(),
         &model,
+        api_format.as_deref(),
     )
     .await
 }
@@ -35,6 +37,7 @@ pub async fn update_provider(
     base_url: String,
     api_key: Option<String>,
     model: String,
+    api_format: Option<String>,
 ) -> AppResult<()> {
     provider_service::update_provider(
         state.pool(),
@@ -43,6 +46,7 @@ pub async fn update_provider(
         &base_url,
         api_key.as_deref(),
         &model,
+        api_format.as_deref(),
     )
     .await
 }
@@ -75,12 +79,7 @@ pub async fn list_models(
         crate::services::provider_service::get_provider_for_chat(state.pool(), Some(&provider_id))
             .await?;
 
-    crate::services::model_service::list_models(
-        &provider.provider_type,
-        &provider.base_url,
-        provider.api_key.as_deref(),
-    )
-    .await
+    crate::services::model_service::list_models(&provider).await
 }
 
 #[tauri::command]

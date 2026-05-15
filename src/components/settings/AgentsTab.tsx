@@ -5,6 +5,7 @@ import { useAgentStore } from '@/stores/useAgentStore';
 import { invoke } from '@tauri-apps/api/core';
 import { cn } from '@/lib/utils';
 import {
+  ChatCircle,
   Robot,
   TreeStructure,
   Code,
@@ -33,6 +34,7 @@ const AGENT_TYPES: AgentType[] = [
 ];
 
 const AGENT_ICONS: Record<AgentType, React.ElementType> = {
+  chat: ChatCircle,
   orchestrator: Robot,
   planner: TreeStructure,
   coder_fe: Code,

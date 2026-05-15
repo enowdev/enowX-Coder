@@ -4,6 +4,40 @@ All notable changes to enowX Coder are documented here.
 
 ---
 
+## [0.2.6] — 2026-04-25
+
+### Token Optimization — 99% Reduction for Anthropic-format Gateways
+- **Prompt caching now works for custom providers**: Added `api_format` field (`openai` | `anthropic`) to providers — custom gateways using Anthropic Messages API now get prompt caching, reducing prompt tokens from ~11,700 to ~0 on cache hits
+- **Chat history sliding window**: Chat path now applies the same context trimming as agent path — max 20 message pairs, 32K char budget, per-message truncation, `html:preview` blocks stripped. Prevents token bloat on long sessions
+- **`uses_anthropic_format()` method**: Centralized routing logic replaces scattered `provider_type == "anthropic" || provider_type == "enowxlabs"` checks across chat service and agent runner
+
+### Gateway SSE Compatibility Fix
+- **Event-line fallback for SSE parsing**: Some Anthropic-compatible gateways omit the `"type"` field from SSE data payloads. Parser now tracks the preceding `event:` line and uses it as fallback — fixes empty responses from proxies like LiteLLM, Claude Desktop gateway, and enowX Labs gateway
+- Applied to both chat SSE parser (`chat_service.rs`) and agent tool SSE parser (`runner.rs`)
+
+### Non-Streaming Fallback for Unsupported Models
+- **Auto-retry without streaming**: When a gateway returns an empty stream (message_start → message_stop with no content blocks), the request is automatically retried with `stream: false` and the full response is parsed synchronously
+- Fixes blank responses for models where the gateway doesn't support streaming (e.g. `claude-opus-4.6` on certain proxies)
+- Applied to both chat path and agent path (with tool call support)
+
+### Endpoint Resolution Fix for Custom Gateways
+- **Preserve `/v1` path for custom providers**: Previously, all non-Anthropic providers had `/v1` stripped from their base URL when building the Anthropic endpoint, resulting in `host/messages` instead of `host/v1/messages`. Now only the built-in `enowxlabs` provider strips `/v1`; custom gateways keep their full path
+- Fixed in chat service, title generation, and agent runner
+
+### Model Listing for Custom Providers
+- **Custom providers can now list models**: Previously, unknown `provider_type` slugs (e.g. user-created `"my-gateway"`) returned "Unknown provider type" error. Now routes by `api_format` — Anthropic-format providers hit `{base_url}/models` with correct auth headers
+- `fetch_anthropic_models` now accepts a configurable base URL and auth scheme instead of hardcoding `api.anthropic.com`
+
+### Provider Settings UI
+- **API Format selector**: New toggle (OpenAI / Anthropic) in Settings for custom providers — choose Anthropic for Claude-compatible gateways to enable prompt caching and correct message serialization
+- Selector shown in both "Add Provider" form and existing provider detail panel
+- Built-in providers (`enowxlabs`, `anthropic`) auto-set to Anthropic format
+
+### Database
+- **Migration `20260424000_provider_api_format.sql`**: Adds `api_format TEXT NOT NULL DEFAULT 'openai'` column to providers table. Existing `anthropic` and `enowxlabs` providers auto-updated to `'anthropic'` format
+
+---
+
 ## [0.2.5] — 2026-04-23
 
 ### Excalidraw Canvas — Collaborative Whiteboard

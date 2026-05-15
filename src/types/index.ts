@@ -33,6 +33,8 @@ export interface Provider {
   isDefault: boolean;
   isBuiltin: boolean;
   isEnabled: boolean;
+  /** Wire format: 'openai' or 'anthropic'. Controls serialisation & prompt caching. */
+  apiFormat: 'openai' | 'anthropic';
   createdAt: string;
   updatedAt: string;
 }
@@ -64,6 +66,7 @@ export interface AgentRun {
 }
 
 export type AgentType =
+  | 'chat'
   | 'orchestrator'
   | 'planner'
   | 'coder_fe'
@@ -76,9 +79,10 @@ export type AgentType =
   | 'researcher'
   | 'librarian';
 
-export const SELECTABLE_AGENTS: AgentType[] = ['orchestrator', 'planner'];
+export const SELECTABLE_AGENTS: AgentType[] = ['chat', 'orchestrator', 'planner'];
 
 export const AGENT_LABELS: Record<AgentType, string> = {
+  chat: 'Chat',
   orchestrator: 'Orchestrator',
   planner: 'Planner',
   coder_fe: 'Coder FE',
