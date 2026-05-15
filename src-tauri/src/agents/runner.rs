@@ -1889,6 +1889,22 @@ fn openai_tool_definitions() -> Vec<Value> {
         json!({
             "type": "function",
             "function": {
+                "name": "patch_file",
+                "description": "Replace a unique string in a file with new content. Use this instead of write_file when you only need to change part of a file. old_string must match exactly one location in the file.",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": { "type": "string", "description": "File path to patch" },
+                        "old_string": { "type": "string", "description": "Exact text to find (must be unique in file)" },
+                        "new_string": { "type": "string", "description": "Replacement text" }
+                    },
+                    "required": ["path", "old_string", "new_string"]
+                }
+            }
+        }),
+        json!({
+            "type": "function",
+            "function": {
                 "name": "list_dir",
                 "description": "List directory contents",
                 "parameters": {
@@ -1968,6 +1984,7 @@ fn map_tool_name(name: &str) -> Option<ToolName> {
     match name {
         "read_file" => Some(ToolName::ReadFile),
         "write_file" => Some(ToolName::WriteFile),
+        "patch_file" => Some(ToolName::PatchFile),
         "list_dir" => Some(ToolName::ListDir),
         "search_files" => Some(ToolName::SearchFiles),
         "run_command" => Some(ToolName::RunCommand),
