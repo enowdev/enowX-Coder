@@ -13,7 +13,7 @@ Thank you for your interest in contributing! enowX-Coder is a Tauri-based AI cod
 
 ```bash
 # Clone the repository
-git clone https://github.com/kevinnft/enowX-Coder.git
+git clone https://github.com/enowdev/enowX-Coder.git
 cd enowX-Coder
 
 # Install frontend dependencies
